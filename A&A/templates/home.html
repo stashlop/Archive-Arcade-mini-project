@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Story Space</title>
+    <!-- Google Fonts - Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Three.js CDN for 3D graphics -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        /* Base Body Styles */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f4f5; /* Light zinc background */
+            color: #3f3f46; /* Dark zinc text */
+            overflow-x: hidden; /* Prevent horizontal scroll due to 3D canvas */
+            -webkit-font-smoothing: antialiased; /* antialiased equivalent */
+            -moz-osx-font-smoothing: grayscale; /* antialiased equivalent */
+        }
+        /* Header Styles */
+        .main-header {
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+            padding: 1rem 2rem;
+            background: rgba(255,255,255,0.7);
+            backdrop-filter: blur(8px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            z-index: 1000;
+        }
+        .logo-link {
+            display: flex;
+            align-items: center;
+            text-decoration: none;
+            color: #3f3f46;
+            margin-right: 2.5rem;
+        }
+        .logo-box {
+            position: relative;
+            width: 64px;
+            height: 64px;
+            flex-shrink: 0;
+            margin-right: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .logo-img, .logo-video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 64px;
+            height: 64px;
+            object-fit: contain;
+            border-radius: 12px;
+            display: block;
+        }
+        .logo-video {
+            display: none;
+            pointer-events: none;
+        }
+        .logo-link:hover .logo-img {
+            display: none;
+        }
+        .logo-link:hover .logo-video {
+            display: block;
+        }
+        .logo-text {
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            white-space: nowrap;
+            line-height: 64px;
+        }
+        .main-nav {
+            display: flex;
+            gap: 2rem;
+            margin-left: 0;
+        }
+        .nav-link {
+            text-decoration: none;
+            color: #3f3f46;
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+        .nav-link:hover {
+            color: #007bff; /* Primary color on hover */
+        }
+        /* Hero Section Styles */
+        .hero-section {
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #f0f9eb; /* Light green background */
+            margin-top: 60px; /* Adjust for fixed header */
+        }
+        .hero-content {
+            text-align: center;
+            max-width: 800px;
+            padding: 2rem;
+        }
+        .hero-text h1 {
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            color: #2c3e50; /* Darker blue */
+        }
+        .hero-text p {
+            font-size: 1.25rem;
+            color: #555;
+            margin-bottom: 2rem;
+        }
+        .hero-buttons {
+            display: flex;
+            gap: 1.5rem;
+            justify-content: center;
+        }
+        .hero-btn {
+            display: inline-block;
+            padding: 0.8rem 1.5rem;
+            border-radius: 0.5rem;
+            text-decoration: none;
+            font-weight: 600;
+            transition: background-color 0.3s ease;
+        }
+        .hero-btn.explore-btn {
+            background-color: #4CAF50; /* Green */
+            color: white;
+        }
+        .hero-btn.explore-btn:hover {
+            background-color: #388E3C; /* Darker green on hover */
+        }
+        .hero-btn.play-btn {
+            background-color: #007bff; /* Blue */
+            color: white;
+        }
+        .hero-btn.play-btn:hover {
+            background-color: #0056b3; /* Darker blue on hover */
+        }
+    </style>
+</head>
+<body class="antialiased">
+    <header class="main-header">
+        <a href="#" class="logo-link">
+            <span class="logo-box">
+                <img src="{{ url_for('static', filename='LOGO.png') }}" alt="Arcade and Archives Logo" class="logo-img">
+                <video class="logo-video" src="{{ url_for('static', filename='LOGO ANIME.mp4') }}" muted loop></video>
+            </span>
+            <span class="logo-text">Arcade and Archives</span>
+        </a>
+        <nav class="main-nav">
+            <a href="#" class="nav-link">Home</a>
+            <a href="#" class="nav-link">Books</a>
+            <a href="#" class="nav-link">Video Games</a>
+            <a href="#" class="nav-link">Cafe</a>
+            <a href="#" class="nav-link">Contact</a>
+        </nav>
+    </header>
+    <main class="hero-section">
+        <div class="hero-content">
+            <div class="hero-text">
+                <h1>Your Ultimate Destination for Stories & Adventures!</h1>
+                <p>Dive into captivating books, explore thrilling video games, and relax at our cozy cafe.</p>
+            </div>
+            <div class="hero-buttons">
+                <a href="#" class="hero-btn explore-btn">Explore Books</a>
+                <a href="#" class="hero-btn play-btn">Play Games</a>
+            </div>
+        </div>
+    </main>
+    <script>
+        // Play the video on hover
+        const logoLink = document.querySelector('.logo-link');
+        const logoVideo = logoLink.querySelector('.logo-video');
+        logoLink.addEventListener('mouseenter', () => {
+            logoVideo.currentTime = 0;
+            logoVideo.play();
+        });
+        logoLink.addEventListener('mouseleave', () => {
+            logoVideo.pause();
+            logoVideo.currentTime = 0;
+        });
+    </script>
+</body>
+</html> 
