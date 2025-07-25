@@ -3,148 +3,94 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Story Space</title>
-    <!-- Google Fonts - Inter -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Three.js CDN for 3D graphics -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <title>Arcade and Archives</title>
     <style>
-        /* Base Body Styles */
+        /* Basic body reset */
         body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f4f4f5; /* Light zinc background */
-            color: #3f3f46; /* Dark zinc text */
-            overflow-x: hidden; /* Prevent horizontal scroll due to 3D canvas */
-            -webkit-font-smoothing: antialiased; /* antialiased equivalent */
-            -moz-osx-font-smoothing: grayscale; /* antialiased equivalent */
+            margin: 0;
+            font-family: sans-serif; /* Added for basic styling */
+            /* You might need to set a text color that is visible over your spline */
+            color: white; 
         }
-        /* Header Styles */
-        .main-header {
-            display: flex;
-            justify-content: flex-start;
-            align-items: center;
-            padding: 1rem 2rem;
-            background: rgba(255,255,255,0.7);
-            backdrop-filter: blur(8px);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-            position: fixed;
+
+        /* Styles for the full-screen background */
+        .spline-background {
+            position: fixed; /* Position it relative to the viewport */
             top: 0;
             left: 0;
             width: 100%;
-            z-index: 1000;
+            height: 100%;
+            z-index: -1; /* Place it behind all other content */
+        }
+        
+        /* Ensure the header and main content appear on top of the background */
+        .main-header, .hero-section {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* --- Some basic styling to make your layout work --- */
+        /* (You can replace this with your own CSS file) */
+        .main-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 2rem;
         }
         .logo-link {
             display: flex;
             align-items: center;
             text-decoration: none;
-            color: #3f3f46;
-            margin-right: 2.5rem;
+            color: inherit;
         }
         .logo-box {
             position: relative;
-            width: 64px;
-            height: 64px;
-            flex-shrink: 0;
-            margin-right: 1rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            width: 50px;
+            height: 50px;
+            margin-right: 10px;
         }
         .logo-img, .logo-video {
             position: absolute;
             top: 0;
             left: 0;
-            width: 64px;
-            height: 64px;
-            object-fit: contain;
-            border-radius: 12px;
-            display: block;
+            width: 100%;
+            height: 100%;
+            border-radius: 8px;
         }
         .logo-video {
-            display: none;
-            pointer-events: none;
-        }
-        .logo-link:hover .logo-img {
-            display: none;
+            opacity: 0;
+            transition: opacity 0.3s;
         }
         .logo-link:hover .logo-video {
-            display: block;
+            opacity: 1;
         }
-        .logo-text {
-            font-size: 1.5rem;
-            font-weight: 700;
-            letter-spacing: 1px;
-            white-space: nowrap;
-            line-height: 64px;
-        }
-        .main-nav {
-            display: flex;
-            gap: 2rem;
-            margin-left: 0;
-        }
-        .nav-link {
-            text-decoration: none;
-            color: #3f3f46;
-            font-weight: 500;
-            transition: color 0.3s ease;
-        }
-        .nav-link:hover {
-            color: #007bff; /* Primary color on hover */
-        }
-        /* Hero Section Styles */
+        .logo-text { font-size: 1.5rem; font-weight: bold; }
+        .main-nav a { margin-left: 1.5rem; text-decoration: none; color: inherit; }
         .hero-section {
-            height: 100vh;
             display: flex;
+            justify-content: center;
             align-items: center;
-            justify-content: center;
-            background-color: #f0f9eb; /* Light green background */
-            margin-top: 60px; /* Adjust for fixed header */
+            height: 80vh;
         }
-        .hero-content {
-            text-align: center;
-            max-width: 800px;
-            padding: 2rem;
-        }
-        .hero-text h1 {
-            font-size: 3.5rem;
-            margin-bottom: 1rem;
-            color: #2c3e50; /* Darker blue */
-        }
-        .hero-text p {
-            font-size: 1.25rem;
-            color: #555;
-            margin-bottom: 2rem;
-        }
-        .hero-buttons {
-            display: flex;
-            gap: 1.5rem;
-            justify-content: center;
-        }
+        .hero-content { text-align: center; }
+        .hero-text h1 { font-size: 3rem; margin-bottom: 1rem; }
+        .hero-text p { font-size: 1.2rem; margin-bottom: 2rem; }
         .hero-btn {
-            display: inline-block;
-            padding: 0.8rem 1.5rem;
-            border-radius: 0.5rem;
+            padding: 1rem 2rem;
+            margin: 0 0.5rem;
             text-decoration: none;
-            font-weight: 600;
-            transition: background-color 0.3s ease;
-        }
-        .hero-btn.explore-btn {
-            background-color: #4CAF50; /* Green */
             color: white;
-        }
-        .hero-btn.explore-btn:hover {
-            background-color: #388E3C; /* Darker green on hover */
-        }
-        .hero-btn.play-btn {
-            background-color: #007bff; /* Blue */
-            color: white;
-        }
-        .hero-btn.play-btn:hover {
-            background-color: #0056b3; /* Darker blue on hover */
+            border: 1px solid white;
+            border-radius: 5px;
         }
     </style>
 </head>
 <body class="antialiased">
+
+    <div class="spline-background">
+        <iframe src='https://my.spline.design/updomi-5tiNZT76iShGB0qrIfkiKfOw/' frameborder='0' width='100%' height='100%'></iframe>
+    </div>
+    
     <header class="main-header">
         <a href="#" class="logo-link">
             <span class="logo-box">
@@ -161,6 +107,7 @@
             <a href="#" class="nav-link">Contact</a>
         </nav>
     </header>
+
     <main class="hero-section">
         <div class="hero-content">
             <div class="hero-text">
@@ -173,6 +120,7 @@
             </div>
         </div>
     </main>
+
     <script>
         // Play the video on hover
         const logoLink = document.querySelector('.logo-link');
@@ -187,4 +135,4 @@
         });
     </script>
 </body>
-</html> 
+</html>
