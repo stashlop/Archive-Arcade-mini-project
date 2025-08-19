@@ -41,6 +41,10 @@
         #cart-items { margin:0.5rem 0; padding-left:1rem; max-height:40vh; overflow:auto; }
         #cart-modal button { padding:0.4rem 0.6rem; border-radius:6px; border:none; cursor:pointer; }
 
+        /* history modal */
+        #history-modal { position:fixed; right:1rem; top:4rem; background:rgba(0,0,0,0.85); color:#fff; padding:1rem; border-radius:8px; display:none; z-index:5000; min-width:320px; }
+        #history-items { margin:0.5rem 0; padding-left:1rem; max-height:40vh; overflow:auto; }
+
         /* payment modal */
         #payment-modal { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); width:360px; max-width:calc(100% - 2rem); background:rgba(8,8,8,0.95); color:#fff; border-radius:10px; padding:1rem; box-shadow:0 10px 40px rgba(0,0,0,0.6); z-index:6000; display:none; }
         #payment-modal header { display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem; }
@@ -78,6 +82,13 @@
             <a href="{{ url_for('books') }}">Books</a>
             <a href="{{ url_for('video_games') }}">Video Games</a>
             <a href="{{ url_for('cafe') }}">Cafe</a>
+
+            <!-- new: purchase history & header cart -->
+            <button id="history-btn" title="Purchase history" style="margin-left:0.8rem; background:transparent; border:1px solid rgba(255,255,255,0.06); color:inherit; padding:0.4rem 0.6rem; border-radius:6px; cursor:pointer;">History</button>
+            <button id="header-view-cart" title="View cart" style="margin-left:0.6rem; background:linear-gradient(90deg,#16a085,#30c7ec); color:#fff; padding:0.4rem 0.6rem; border-radius:6px; border:none; cursor:pointer;">
+                Cart (<span id="header-cart-count">0</span>)
+            </button>
+
             <button id="audio-toggle" aria-pressed="false" title="Toggle sound">🔈</button>
         </nav>
     </header>
@@ -208,6 +219,16 @@
         </div>
     </div>
 
+    <!-- Purchase history modal -->
+    <div id="history-modal" role="dialog" aria-hidden="true" style="display:none; position:fixed; right:1rem; top:4rem; background:rgba(0,0,0,0.85); color:#fff; padding:1rem; border-radius:8px; z-index:5000; min-width:320px;">
+        <strong>Purchase History</strong>
+        <ul id="history-items" style="margin:0.5rem 0; padding-left:1rem; max-height:40vh; overflow:auto;"></ul>
+        <div style="display:flex; gap:.5rem; justify-content:flex-end; margin-top:.5rem;">
+            <button id="clear-history" style="background:transparent; border:1px solid rgba(255,255,255,0.06); color:inherit; padding:0.4rem 0.6rem; border-radius:6px; cursor:pointer;">Clear</button>
+            <button id="close-history" style="background:linear-gradient(90deg,#16a085,#30c7ec); color:#fff; padding:0.4rem 0.6rem; border-radius:6px; border:none; cursor:pointer;">Close</button>
+        </div>
+    </div>
+
     <!-- Payment modal (demo client-side simulation) -->
     <div id="payment-modal" role="dialog" aria-hidden="true" aria-labelledby="payment-title">
         <header>
@@ -299,15 +320,67 @@
 
         // Simple cart logic
         const cart = [];
-        const cartCountEl = document.getElementById('cart-count');
+        const cartCountEl = document.getElementById('cart-count');         // footer/bar count
+        const headerCartCountEl = document.getElementById('header-cart-count'); // header count
         const cartItemsEl = document.getElementById('cart-items');
         const cartModal = document.getElementById('cart-modal');
         const viewCartBtn = document.getElementById('view-cart');
+        const headerViewCartBtn = document.getElementById('header-view-cart');
         const closeCartBtn = document.getElementById('close-cart');
         const checkoutBtn = document.getElementById('checkout');
 
+        // Purchase history
+        const historyModal = document.getElementById('history-modal');
+        const historyBtn = document.getElementById('history-btn');
+        const historyItemsEl = document.getElementById('history-items');
+        const closeHistoryBtn = document.getElementById('close-history');
+        const clearHistoryBtn = document.getElementById('clear-history');
+
+        function getPurchaseHistory() {
+            try {
+                return JSON.parse(localStorage.getItem('purchaseHistory') || '[]');
+            } catch (_) { return []; }
+        }
+        function savePurchaseHistory(list) {
+            localStorage.setItem('purchaseHistory', JSON.stringify(list || []));
+        }
+        function addToPurchaseHistory(purchase) {
+            const list = getPurchaseHistory();
+            list.unshift(purchase); // newest first
+            savePurchaseHistory(list);
+            renderHistoryUI();
+        }
+        function renderHistoryUI() {
+            const list = getPurchaseHistory();
+            historyItemsEl.innerHTML = '';
+            if (list.length === 0) {
+                const li = document.createElement('li');
+                li.textContent = 'No purchases yet.';
+                historyItemsEl.appendChild(li);
+                return;
+            }
+            list.forEach(p => {
+                const li = document.createElement('li');
+                const date = new Date(p.date).toLocaleString();
+                li.innerHTML = `<strong>${p.items.length} item(s)</strong> — $${p.total} — ${date}<br><small style="color:#cfcfcf;">${p.buyer?.name || ''} ${p.buyer?.email ? '— ' + p.buyer.email : ''}</small>`;
+                const details = document.createElement('ul');
+                details.style.margin = '0.4rem 0 0.6rem 0.6rem';
+                details.style.padding = '0';
+                p.items.forEach(it => {
+                    const its = document.createElement('li');
+                    its.style.listStyle = 'disc';
+                    its.style.color = '#e6e6e6';
+                    its.textContent = `${it.title} — ${it.type} — $${it.price}`;
+                    details.appendChild(its);
+                });
+                li.appendChild(details);
+                historyItemsEl.appendChild(li);
+            });
+        }
+
         function updateCartUI() {
-            cartCountEl.textContent = cart.length;
+            if (cartCountEl) cartCountEl.textContent = cart.length;
+            if (headerCartCountEl) headerCartCountEl.textContent = cart.length;
             cartItemsEl.innerHTML = '';
             cart.forEach((it, idx) => {
                 const li = document.createElement('li');
@@ -348,10 +421,21 @@
             });
         });
 
-        viewCartBtn.addEventListener('click', () => {
-            cartModal.style.display = 'block';
-            cartModal.setAttribute('aria-hidden','false');
-        });
+        // wire header cart button to show cart modal
+        if (headerViewCartBtn) {
+            headerViewCartBtn.addEventListener('click', () => {
+                cartModal.style.display = 'block';
+                cartModal.setAttribute('aria-hidden','false');
+            });
+        }
+
+        if (viewCartBtn) {
+            viewCartBtn.addEventListener('click', () => {
+                cartModal.style.display = 'block';
+                cartModal.setAttribute('aria-hidden','false');
+            });
+        }
+
         closeCartBtn.addEventListener('click', () => {
             cartModal.style.display = 'none';
             cartModal.setAttribute('aria-hidden','true');
@@ -423,12 +507,22 @@
                 return;
             }
 
+            // prepare purchase snapshot for history (use before clearing cart)
+            const purchaseSnapshot = {
+                id: Date.now(),
+                items: cart.map(i => ({ ...i })),
+                total: cartTotal(),
+                buyer: { name, email },
+                date: new Date().toISOString()
+            };
+
             if (pm === 'demo') {
                 // demo flow: no real charge
                 paymentMessage.textContent = 'Processing demo payment...';
                 paymentForm.classList.add('processing');
                 setTimeout(() => {
                     paymentMessage.textContent = 'Demo payment successful. Thank you!';
+                    addToPurchaseHistory(purchaseSnapshot);
                     cart.length = 0;
                     updateCartUI();
                     paymentForm.classList.remove('processing');
@@ -462,6 +556,7 @@
                 // accept demo test card 4242... or randomly succeed
                 if (card.startsWith('4242') || Math.random() > 0.1) {
                     paymentMessage.textContent = 'Payment successful. Thank you!';
+                    addToPurchaseHistory(purchaseSnapshot);
                     cart.length = 0;
                     updateCartUI();
                     paymentForm.classList.remove('processing');
@@ -473,8 +568,31 @@
             }, 1400);
         });
 
+        // history modal handlers
+        if (historyBtn) {
+            historyBtn.addEventListener('click', () => {
+                renderHistoryUI();
+                historyModal.style.display = 'block';
+                historyModal.setAttribute('aria-hidden','false');
+            });
+        }
+        if (closeHistoryBtn) {
+            closeHistoryBtn.addEventListener('click', () => {
+                historyModal.style.display = 'none';
+                historyModal.setAttribute('aria-hidden','true');
+            });
+        }
+        if (clearHistoryBtn) {
+            clearHistoryBtn.addEventListener('click', () => {
+                if (!confirm('Clear all purchase history?')) return;
+                savePurchaseHistory([]);
+                renderHistoryUI();
+            });
+        }
+
         // initial UI update
         updateCartUI();
+        renderHistoryUI();
 
         // try to autoplay audio after user interaction
         window.addEventListener('pointerdown', function once() {
