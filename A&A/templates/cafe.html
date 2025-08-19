@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Cafe - Arcade and Archives</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="main-header">
+    <a href="{{ url_for('home') }}" class="logo-link"><span class="logo-text">Arcade and Archives</span></a>
+    <nav class="main-nav">
+      <a href="{{ url_for('home') }}">Home</a>
+      <a href="{{ url_for('books') }}">Books</a>
+      <a href="{{ url_for('video_games') }}">Video Games</a>
+      <a href="{{ url_for('cafe') }}">Cafe</a>
+    </nav>
+  </header>
+
+  <main style="padding:2rem;">
+    <h1>Cafe</h1>
+    <p>Placeholder page for the Cafe — add menu, hours, and content here.</p>
+  </main>

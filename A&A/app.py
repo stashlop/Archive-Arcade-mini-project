@@ -67,6 +67,18 @@ def books():
         return redirect(url_for('login'))
     return render_template('books.html')
 
+@app.route('/video-games')
+def video_games():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+    return render_template('video_games.html')
+
+@app.route('/cafe')
+def cafe():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+    return render_template('cafe.html')
+
 @app.route('/api/get-story', methods=['POST'])
 def get_story_from_api():
     api_key = os.getenv('GEMINI_API_KEY')

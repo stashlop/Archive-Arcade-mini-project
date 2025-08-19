@@ -92,17 +92,16 @@
     </div>
     
     <header class="main-header">
-        <a href="#" class="logo-link">
+        <a href="{{ url_for('home') }}" class="logo-link">
             <span class="logo-box">
-                <img src="{{ url_for('static', filename='/workspaces/A-A/A&A/static/LOGO.PNG') }}" alt="Arcade and Archives Logo" class="logo-img">
             </span>
             <span class="logo-text">Arcade and Archives</span>
         </a>
         <nav class="main-nav">
-            <a href="#" class="nav-link">Home</a>
-            <a href="#" class="nav-link">Books</a>
-            <a href="#" class="nav-link">Video Games</a>
-            <a href="#" class="nav-link">Cafe</a>
+            <a href="{{ url_for('home') }}" class="nav-link">Home</a>
+            <a href="{{ url_for('books') }}" class="nav-link">Books</a>
+            <a href="{{ url_for('video_games') }}" class="nav-link">Video Games</a>
+            <a href="{{ url_for('cafe') }}" class="nav-link">Cafe</a>
             <a href="#" class="nav-link">Contact</a>
         </nav>
     </header>
@@ -110,28 +109,18 @@
     <main class="hero-section">
         <div class="hero-content">
             <div class="hero-text">
-                <h1>Your Ultimate Destination for Stories & Adventures!</h1>
-                <p>Dive into captivating books, explore thrilling video games, and relax at our cozy cafe.</p>
-            </div>
-            <div class="hero-buttons">
-                <a href="#" class="hero-btn explore-btn">Explore Books</a>
-                <a href="#" class="hero-btn play-btn">Play Games</a>
             </div>
         </div>
     </main>
 
     <script>
-        // Play the video on hover
+        // Play the video on hover (if you add a .logo-video element later)
         const logoLink = document.querySelector('.logo-link');
-        const logoVideo = logoLink.querySelector('.logo-video');
-        logoLink.addEventListener('mouseenter', () => {
-            logoVideo.currentTime = 0;
-            logoVideo.play();
-        });
-        logoLink.addEventListener('mouseleave', () => {
-            logoVideo.pause();
-            logoVideo.currentTime = 0;
-        });
+        const logoVideo = logoLink ? logoLink.querySelector('.logo-video') : null;
+        if (logoLink && logoVideo) {
+            logoLink.addEventListener('mouseenter', () => logoVideo.play());
+            logoLink.addEventListener('mouseleave', () => { logoVideo.currentTime = 0; });
+        }
     </script>
 </body>
 </html>
