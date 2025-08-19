@@ -1,48 +1,56 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Video Games - Arcade and Archives</title>
     <style>
         body { margin: 0; font-family: sans-serif; color: white; }
-        .spline-background { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; overflow: hidden; }
+        .spline-background { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -2; overflow: hidden; }
         #bg-video { width: 100%; height: 100%; object-fit: cover; display: block; }
-        .main-header, .hero-section { position: relative; z-index: 1; }
-        .main-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 2rem; }
-        .logo-link { display: flex; align-items: center; text-decoration: none; color: inherit; }
-        .logo-text { font-size: 1.5rem; font-weight: bold; }
-        .main-nav a { margin-left: 1.5rem; text-decoration: none; color: inherit; font-weight:600; }
-        .hero-section { display: flex; justify-content: center; align-items: center; height: 80vh; }
-        .hero-content { text-align: center; max-width: 900px; padding: 1rem; }
-        .hero-text h1 { font-size: 3rem; margin-bottom: 1rem; }
-        .hero-text p { font-size: 1.2rem; margin-bottom: 2rem; color: #e6e6e6; }
-        .hero-btn { padding: 1rem 2rem; margin: 0 0.5rem; text-decoration: none; color: white; border: 1px solid rgba(255,255,255,0.25); border-radius: 5px; background: rgba(0,0,0,0.25); }
+        .main-header, .hero-section { position: relative; z-index: 2; }
+        .main-header { display:flex; justify-content:space-between; align-items:center; padding:1rem 2rem; }
+        .logo-link { display:flex; align-items:center; text-decoration:none; color:inherit; }
+        .logo-text { font-size:1.25rem; font-weight:700; }
+        .main-nav a { margin-left:1rem; color:inherit; text-decoration:none; font-weight:600; }
+        .hero-section { display:flex; justify-content:center; align-items:center; height:45vh; }
+        .hero-content { text-align:center; max-width:900px; padding:1rem; }
+        .hero-text h1 { font-size:3rem; margin-bottom:1rem; }
+        .hero-text p { font-size:1.1rem; margin-bottom:1.25rem; color:#e6e6e6; }
+        .hero-btn { padding:0.9rem 1.6rem; margin:0 0.4rem; text-decoration:none; color:white; border:1px solid rgba(255,255,255,0.18); border-radius:6px; background:rgba(0,0,0,0.25); }
 
-        /* audio toggle button */
-        #audio-toggle {
-            background: rgba(0,0,0,0.45);
-            color: #fff;
-            border: 1px solid rgba(255,255,255,0.12);
-            padding: 0.4rem 0.6rem;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 1rem;
-            margin-left: 1rem;
-        }
-        #audio-toggle[aria-pressed="true"] { background: linear-gradient(90deg,#9d4edd,#f72585); box-shadow: 0 2px 8px #0004; }
+        /* audio toggle */
+        #audio-toggle { background:rgba(0,0,0,0.45); color:#fff; border:1px solid rgba(255,255,255,0.12); padding:0.4rem 0.6rem; border-radius:6px; cursor:pointer; font-size:1rem; margin-left:1rem; }
+        #audio-toggle[aria-pressed="true"] { background:linear-gradient(90deg,#9d4edd,#f72585); box-shadow:0 2px 8px #0004; }
+
+        /* store */
+        .games-container { position:relative; z-index:3; max-width:1100px; margin:1.5rem auto 3rem; padding:1rem; }
+        .store-panel { background:rgba(0,0,0,0.45); border-radius:12px; padding:1rem; box-shadow:0 8px 24px rgba(0,0,0,0.6); border:1px solid rgba(255,255,255,0.04); overflow:auto; max-height:55vh; }
+        .games-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:1rem; margin-top:1rem; }
+        .game-card { background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); padding:0.8rem; border-radius:10px; color:#fff; }
+        .game-card img { width:100%; height:140px; object-fit:cover; border-radius:6px; display:block; margin-bottom:0.6rem; }
+        .game-card h3 { margin:0 0 0.3rem 0; font-size:1.05rem; }
+        .game-desc { margin:0 0 0.6rem 0; color:#e6e6e6; font-size:.95rem; }
+        .game-actions { display:flex; gap:0.5rem; justify-content:center; }
+        .game-actions button { padding:0.45rem 0.7rem; border-radius:6px; border:none; cursor:pointer; font-weight:600; }
+        .buy-btn { background:linear-gradient(90deg,#16a085,#30c7ec); color:#fff; }
+        .rent-btn { background:rgba(255,255,255,0.08); color:#fff; border:1px solid rgba(255,255,255,0.06); }
+
+        /* cart modal */
+        #cart-modal { position:fixed; right:1rem; top:4rem; background:rgba(0,0,0,0.85); color:#fff; padding:1rem; border-radius:8px; display:none; z-index:5000; min-width:260px; }
+        #cart-items { margin:0.5rem 0; padding-left:1rem; max-height:40vh; overflow:auto; }
+        #cart-modal button { padding:0.4rem 0.6rem; border-radius:6px; border:none; cursor:pointer; }
     </style>
 </head>
 <body class="antialiased">
 
     <div class="spline-background">
-        <!-- fullscreen looping MP4 video -->
         <video id="bg-video" autoplay loop muted playsinline>
             <source src="{{ url_for('static', filename='videogames.mp4') }}" type="video/mp4">
             Your browser does not support the video tag.
         </video>
 
-        <!-- background audio (looping). Place your MP3 at static/audio/arcade_ambience.mp3 -->
+        <!-- corrected audio source -->
         <audio id="bg-audio" loop preload="auto">
             <source src="{{ url_for('static', filename='videogames.mp4') }}" type="audio/mpeg">
             Your browser does not support the audio element.
@@ -50,15 +58,12 @@
     </div>
 
     <header class="main-header">
-        <a href="{{ url_for('home') }}" class="logo-link">
-            <span class="logo-text">Arcade and Archives</span>
-        </a>
+        <a href="{{ url_for('home') }}" class="logo-link"><span class="logo-text">Arcade and Archives</span></a>
         <nav class="main-nav">
             <a href="{{ url_for('home') }}">Home</a>
             <a href="{{ url_for('books') }}">Books</a>
             <a href="{{ url_for('video_games') }}">Video Games</a>
             <a href="{{ url_for('cafe') }}">Cafe</a>
-            <!-- audio toggle button -->
             <button id="audio-toggle" aria-pressed="false" title="Toggle sound">🔈</button>
         </nav>
     </header>
@@ -74,6 +79,149 @@
         </div>
     </main>
 
+    <div class="games-container">
+        <div class="store-panel">
+            <section class="explore-store" aria-label="Explore Games">
+                <h2 style="margin-top:0;">Explore & Shop</h2>
+                <div class="games-grid">
+                    <article class="game-card" data-id="1" data-title="Neo Racer" data-buy="19.99" data-rent="4.99">
+                        <img src="{{ url_for('static', filename='images/game1.jpg') }}" alt="Neo Racer">
+                        <h3>Neo Racer</h3>
+                        <p class="game-desc">High-speed synthwave racing.</p>
+                        <div class="game-actions">
+                            <button class="buy-btn">Buy $19.99</button>
+                            <button class="rent-btn">Rent $4.99</button>
+                        </div>
+                    </article>
+
+                    <article class="game-card" data-id="2" data-title="Mystic Library" data-buy="14.99" data-rent="3.99">
+                        <img src="{{ url_for('static', filename='images/game2.jpg') }}" alt="Mystic Library">
+                        <h3>Mystic Library</h3>
+                        <p class="game-desc">Puzzle adventure among enchanted stacks.</p>
+                        <div class="game-actions">
+                            <button class="buy-btn">Buy $14.99</button>
+                            <button class="rent-btn">Rent $3.99</button>
+                        </div>
+                    </article>
+
+                    <article class="game-card" data-id="3" data-title="Pixel Brawl" data-buy="9.99" data-rent="2.49">
+                        <img src="{{ url_for('static', filename='images/game3.jpg') }}" alt="Pixel Brawl">
+                        <h3>Pixel Brawl</h3>
+                        <p class="game-desc">Fast retro arena combat.</p>
+                        <div class="game-actions">
+                            <button class="buy-btn">Buy $9.99</button>
+                            <button class="rent-btn">Rent $2.49</button>
+                        </div>
+                    </article>
+
+                    <article class="game-card" data-id="4" data-title="Baldur's Gate 3" data-buy="59.99" data-rent="9.99">
+                        <img src="{{ url_for('static', filename='Baldurs_Gate_3.jpeg') }}" alt="Baldur's Gate 3">
+                        <h3>Baldur's Gate 3</h3>
+                        <p class="game-desc">Epic CRPG adventure with deep choices and co-op.</p>
+                        <div class="game-actions">
+                            <button class="buy-btn">Buy $59.99</button>
+                            <button class="rent-btn">Rent $9.99</button>
+                        </div>
+                    </article>
+
+                    <article class="game-card" data-id="5" data-title="Alan Wake 2" data-buy="49.99" data-rent="7.99">
+                        <img src="{{ url_for('static', filename='Alan_Wake_2.jpeg') }}" alt="Alan Wake 2">
+                        <h3>Alan Wake 2</h3>
+                        <p class="game-desc">Psychological horror thriller with cinematic storytelling.</p>
+                        <div class="game-actions">
+                            <button class="buy-btn">Buy $49.99</button>
+                            <button class="rent-btn">Rent $7.99</button>
+                        </div>
+                    </article>
+
+                    <article class="game-card" data-id="6" data-title="Cyberpunk 2077" data-buy="29.99" data-rent="6.99">
+                        <img src="{{ url_for('static', filename='images/game6.jpg') }}" alt="Cyberpunk 2077">
+                        <h3>Cyberpunk 2077</h3>
+                        <p class="game-desc">Open-world RPG in a neon-soaked metropolis.</p>
+                        <div class="game-actions">
+                            <button class="buy-btn">Buy $29.99</button>
+                            <button class="rent-btn">Rent $6.99</button>
+                        </div>
+                    </article>
+
+                    <article class="game-card" data-id="7" data-title="Red Dead Redemption 2" data-buy="39.99" data-rent="8.99">
+                        <img src="{{ url_for('static', filename='images/game7.jpg') }}" alt="Red Dead Redemption 2">
+                        <h3>Red Dead Redemption 2</h3>
+                        <p class="game-desc">Open-world western with cinematic storytelling.</p>
+                        <div class="game-actions">
+                            <button class="buy-btn">Buy $39.99</button>
+                            <button class="rent-btn">Rent $8.99</button>
+                        </div>
+                    </article>
+
+                    <article class="game-card" data-id="8" data-title="The Witcher 3: Wild Hunt" data-buy="29.99" data-rent="6.49">
+                        <img src="{{ url_for('static', filename='images/game8.jpg') }}" alt="The Witcher 3">
+                        <h3>The Witcher 3: Wild Hunt</h3>
+                        <p class="game-desc">Open-world RPG full of monsters, stories, and choices.</p>
+                        <div class="game-actions">
+                            <button class="buy-btn">Buy $29.99</button>
+                            <button class="rent-btn">Rent $6.49</button>
+                        </div>
+                    </article>
+
+                    <article class="game-card" data-id="9" data-title="The Last of Us: Part I & II" data-buy="49.99" data-rent="9.49">
+                        <img src="{{ url_for('static', filename='images/game9.jpg') }}" alt="The Last of Us">
+                        <h3>The Last of Us: Part I & II</h3>
+                        <p class="game-desc">Emotional narrative-driven action-adventure series.</p>
+                        <div class="game-actions">
+                            <button class="buy-btn">Buy $49.99</button>
+                            <button class="rent-btn">Rent $9.49</button>
+                        </div>
+                    </article>
+
+                    <article class="game-card" data-id="10" data-title="God of War (2018)" data-buy="29.99" data-rent="6.99">
+                        <img src="{{ url_for('static', filename='images/game10.jpg') }}" alt="God of War (2018)">
+                        <h3>God of War (2018)</h3>
+                        <p class="game-desc">A mythic reimagining: father, son, and monsters.</p>
+                        <div class="game-actions">
+                            <button class="buy-btn">Buy $29.99</button>
+                            <button class="rent-btn">Rent $6.99</button>
+                        </div>
+                    </article>
+
+                    <article class="game-card" data-id="11" data-title="Disco Elysium" data-buy="19.99" data-rent="4.49">
+                        <img src="{{ url_for('static', filename='images/game11.jpg') }}" alt="Disco Elysium">
+                        <h3>Disco Elysium</h3>
+                        <p class="game-desc">A groundbreaking RPG focused on choice, dialogue, and investigation.</p>
+                        <div class="game-actions">
+                            <button class="buy-btn">Buy $19.99</button>
+                            <button class="rent-btn">Rent $4.49</button>
+                        </div>
+                    </article>
+
+                    <article class="game-card" data-id="12" data-title="Silent Hill 2 (Remake)" data-buy="39.99" data-rent="8.49">
+                        <img src="{{ url_for('static', filename='images/game12.jpg') }}" alt="Silent Hill 2 (Remake)">
+                        <h3>Silent Hill 2 (Remake)</h3>
+                        <p class="game-desc">Reimagined survival-horror classic with modern visuals.</p>
+                        <div class="game-actions">
+                            <button class="buy-btn">Buy $39.99</button>
+                            <button class="rent-btn">Rent $8.49</button>
+                        </div>
+                    </article>
+                </div>
+
+                <div id="cart-bar" aria-live="polite" style="margin-top:1rem;">
+                    Cart: <span id="cart-count">0</span> items — <button id="view-cart">View</button>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- Cart modal -->
+    <div id="cart-modal" role="dialog" aria-hidden="true">
+        <strong>Cart</strong>
+        <ul id="cart-items"></ul>
+        <div style="display:flex; gap:.5rem; justify-content:flex-end; margin-top:.5rem;">
+            <button id="checkout">Checkout</button>
+            <button id="close-cart">Close</button>
+        </div>
+    </div>
+
     <script>
         const logoLink = document.querySelector('.logo-link');
         const logoVideo = logoLink ? logoLink.querySelector('.logo-video') : null;
@@ -87,7 +235,6 @@
         const bgVideo = document.getElementById('bg-video');
         const audioToggle = document.getElementById('audio-toggle');
 
-        // attempt to autoplay audio when user interacts (autoplay with sound is usually blocked)
         async function tryPlayAudio() {
             if (!bgAudio) return;
             try {
@@ -95,7 +242,6 @@
                 audioToggle.textContent = '🔊';
                 audioToggle.setAttribute('aria-pressed','true');
             } catch (err) {
-                // autoplay blocked; keep audio paused until user presses the button
                 audioToggle.textContent = '🔈';
                 audioToggle.setAttribute('aria-pressed','false');
             }
@@ -103,12 +249,10 @@
 
         audioToggle.addEventListener('click', async () => {
             if (audioToggle.getAttribute('aria-pressed') === 'true') {
-                // currently pressed, so unpress it
                 audioToggle.setAttribute('aria-pressed', 'false');
                 audioToggle.textContent = '🔈';
                 bgAudio.pause();
             } else {
-                // not pressed, so press it
                 audioToggle.setAttribute('aria-pressed', 'true');
                 audioToggle.textContent = '🔊';
                 await tryPlayAudio();
@@ -119,6 +263,84 @@
         bgVideo.pause();
         bgVideo.currentTime = 0.1;
         bgVideo.load();
+
+        // Simple cart logic
+        const cart = [];
+        const cartCountEl = document.getElementById('cart-count');
+        const cartItemsEl = document.getElementById('cart-items');
+        const cartModal = document.getElementById('cart-modal');
+        const viewCartBtn = document.getElementById('view-cart');
+        const closeCartBtn = document.getElementById('close-cart');
+        const checkoutBtn = document.getElementById('checkout');
+
+        function updateCartUI() {
+            cartCountEl.textContent = cart.length;
+            cartItemsEl.innerHTML = '';
+            cart.forEach((it, idx) => {
+                const li = document.createElement('li');
+                li.textContent = `${it.title} — ${it.type} — $${it.price}`;
+                const rm = document.createElement('button');
+                rm.textContent = 'x';
+                rm.style.marginLeft = '0.6rem';
+                rm.onclick = () => { cart.splice(idx,1); updateCartUI(); };
+                li.appendChild(rm);
+                cartItemsEl.appendChild(li);
+            });
+        }
+
+        document.querySelectorAll('.buy-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const card = e.target.closest('.game-card');
+                const title = card.dataset.title;
+                const price = card.dataset.buy;
+                cart.push({ id: card.dataset.id, title, type: 'Buy', price });
+                updateCartUI();
+                alert(`${title} added to cart (Buy $${price})`);
+            });
+        });
+
+        document.querySelectorAll('.rent-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const card = e.target.closest('.game-card');
+                const title = card.dataset.title;
+                const basePrice = parseFloat(card.dataset.rent);
+                let days = prompt('Rent days (1,3,7):', '1');
+                if (!days) return;
+                days = parseInt(days,10);
+                if (![1,3,7].includes(days)) { alert('Choose 1, 3 or 7 days.'); return; }
+                const price = (basePrice * days).toFixed(2);
+                cart.push({ id: card.dataset.id, title, type: `Rent ${days}d`, price });
+                updateCartUI();
+                alert(`${title} added to cart (Rent ${days}d — $${price})`);
+            });
+        });
+
+        viewCartBtn.addEventListener('click', () => {
+            cartModal.style.display = 'block';
+            cartModal.setAttribute('aria-hidden','false');
+        });
+        closeCartBtn.addEventListener('click', () => {
+            cartModal.style.display = 'none';
+            cartModal.setAttribute('aria-hidden','true');
+        });
+
+        checkoutBtn.addEventListener('click', () => {
+            if (cart.length === 0) { alert('Cart is empty'); return; }
+            const total = cart.reduce((s,i)=> s + parseFloat(i.price), 0).toFixed(2);
+            alert(`Checkout — total $${total}. (Integrate payment gateway to complete purchase.)`);
+            cart.length = 0;
+            updateCartUI();
+            cartModal.style.display = 'none';
+        });
+
+        // initial UI update
+        updateCartUI();
+
+        // try to autoplay audio after user interaction
+        window.addEventListener('pointerdown', function once() {
+            tryPlayAudio();
+            window.removeEventListener('pointerdown', once);
+        });
     </script>
 </body>
 </html>
