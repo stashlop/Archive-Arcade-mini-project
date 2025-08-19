@@ -6,7 +6,8 @@
     <title>Video Games - Arcade and Archives</title>
     <style>
         body { margin: 0; font-family: sans-serif; color: white; }
-        .spline-background { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; }
+        .spline-background { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; overflow: hidden; }
+        #bg-video { width: 100%; height: 100%; object-fit: cover; display: block; }
         .main-header, .hero-section { position: relative; z-index: 1; }
         .main-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 2rem; }
         .logo-link { display: flex; align-items: center; text-decoration: none; color: inherit; }
@@ -17,12 +18,35 @@
         .hero-text h1 { font-size: 3rem; margin-bottom: 1rem; }
         .hero-text p { font-size: 1.2rem; margin-bottom: 2rem; color: #e6e6e6; }
         .hero-btn { padding: 1rem 2rem; margin: 0 0.5rem; text-decoration: none; color: white; border: 1px solid rgba(255,255,255,0.25); border-radius: 5px; background: rgba(0,0,0,0.25); }
+
+        /* audio toggle button */
+        #audio-toggle {
+            background: rgba(0,0,0,0.45);
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.12);
+            padding: 0.4rem 0.6rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            margin-left: 1rem;
+        }
+        #audio-toggle[aria-pressed="true"] { background: linear-gradient(90deg,#9d4edd,#f72585); box-shadow: 0 2px 8px #0004; }
     </style>
 </head>
 <body class="antialiased">
 
     <div class="spline-background">
-        <iframe src="https://my.spline.design/updomi-5tiNZT76iShGB0qrIfkiKfOw/" frameborder="0" width="100%" height="100%"></iframe>
+        <!-- fullscreen looping MP4 video -->
+        <video id="bg-video" autoplay loop muted playsinline>
+            <source src="{{ url_for('static', filename='videogames.mp4') }}" type="video/mp4">
+            Your browser does not support the video tag.
+        </video>
+
+        <!-- background audio (looping). Place your MP3 at static/audio/arcade_ambience.mp3 -->
+        <audio id="bg-audio" loop preload="auto">
+            <source src="{{ url_for('static', filename='videogames.mp4') }}" type="audio/mpeg">
+            Your browser does not support the audio element.
+        </audio>
     </div>
 
     <header class="main-header">
@@ -34,6 +58,8 @@
             <a href="{{ url_for('books') }}">Books</a>
             <a href="{{ url_for('video_games') }}">Video Games</a>
             <a href="{{ url_for('cafe') }}">Cafe</a>
+            <!-- audio toggle button -->
+            <button id="audio-toggle" aria-pressed="false" title="Toggle sound">🔈</button>
         </nav>
     </header>
 
@@ -55,6 +81,44 @@
             logoLink.addEventListener('mouseenter', () => logoVideo.play());
             logoLink.addEventListener('mouseleave', () => { logoVideo.currentTime = 0; });
         }
+
+        // audio controls
+        const bgAudio = document.getElementById('bg-audio');
+        const bgVideo = document.getElementById('bg-video');
+        const audioToggle = document.getElementById('audio-toggle');
+
+        // attempt to autoplay audio when user interacts (autoplay with sound is usually blocked)
+        async function tryPlayAudio() {
+            if (!bgAudio) return;
+            try {
+                await bgAudio.play();
+                audioToggle.textContent = '🔊';
+                audioToggle.setAttribute('aria-pressed','true');
+            } catch (err) {
+                // autoplay blocked; keep audio paused until user presses the button
+                audioToggle.textContent = '🔈';
+                audioToggle.setAttribute('aria-pressed','false');
+            }
+        }
+
+        audioToggle.addEventListener('click', async () => {
+            if (audioToggle.getAttribute('aria-pressed') === 'true') {
+                // currently pressed, so unpress it
+                audioToggle.setAttribute('aria-pressed', 'false');
+                audioToggle.textContent = '🔈';
+                bgAudio.pause();
+            } else {
+                // not pressed, so press it
+                audioToggle.setAttribute('aria-pressed', 'true');
+                audioToggle.textContent = '🔊';
+                await tryPlayAudio();
+            }
+        });
+
+        // preload and prepare video
+        bgVideo.pause();
+        bgVideo.currentTime = 0.1;
+        bgVideo.load();
     </script>
 </body>
 </html>
