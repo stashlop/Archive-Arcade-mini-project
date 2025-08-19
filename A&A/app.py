@@ -1,4 +1,6 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash
+import os
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
+import requests
 from werkzeug.security import generate_password_hash, check_password_hash
 from models import db, User
 
@@ -59,5 +61,36 @@ def logout():
     session.pop('user', None)
     return redirect(url_for('index'))
 
+@app.route('/books')
+def books():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+    return render_template('books.html')
+
+@app.route('/api/get-story', methods=['POST'])
+def get_story_from_api():
+    api_key = os.getenv('GEMINI_API_KEY')
+    if not api_key:
+        return jsonify({'error': 'API key is not configured on the server.'}), 500
+
+    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    prompt = "Tell me a short, enchanting story (around 150 words) that one might discover in a forgotten corner of a magical library. It should be mysterious and slightly whimsical."
+    payload = {"contents": [{"parts": [{"text": prompt}]}]}
+
+    try:
+        response = requests.post(api_url, json=payload)
+        response.raise_for_status()
+        result = response.json()
+
+        if result.get('candidates'):
+            story = result['candidates'][0]['content']['parts'][0]['text']
+            return jsonify({'story': story})
+        else:
+            return jsonify({'error': "The library's magic is faint today. Please try again later."}), 500
+    except requests.exceptions.RequestException as e:
+        print(f"API request failed: {e}")
+        return jsonify({'error': 'A magical interference prevented the story from appearing.'}), 500
+
+
 if __name__ == '__main__':
-    app.run(debug=True) 
+    app.run(debug=True)

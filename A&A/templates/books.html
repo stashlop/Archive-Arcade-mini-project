@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cozy Library - 3D Model</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: sans-serif;
+            background-color: #111;
+        }
+        canvas {
+            display: block;
+        }
+        #ui-container {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            padding: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            border-radius: 10px;
+            font-size: 14px;
+        }
+        .button {
+            padding: 8px 12px;
+            margin-top: 5px;
+            background-color: #444;
+            border: 1px solid #666;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .button:hover {
+            background-color: #555;
+        }
+        .button.active {
+            background-color: #007bff;
+            border-color: #007bff;
+        }
+        /* Modal for displaying the story */
+        #story-modal {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(5px);
+            display: none; /* Hidden by default */
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+        }
+        #story-container {
+            background: #1f2937;
+            color: #e5e7eb;
+            padding: 30px;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        #story-text {
+            white-space: pre-wrap;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+        #close-story-btn {
+            display: block;
+            margin: 0 auto;
+            padding: 10px 20px;
+            background: #4f46e5;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div id="ui-container">
+        <b>Lighting Controls:</b><br>
+        <button id="day-btn" class="button active">Day</button>
+        <button id="night-btn" class="button">Night</button>
+        <p>Click on the desk lamps to toggle them!</p>
+        <p><b>Press [E] to read a story.</b></p>
+    </div>
+    <div id="story-modal">
+        <div id="story-container">
+            <p id="story-text">Loading story...</p>
+            <button id="close-story-btn">Close</button>
+        </div>
+    </div>
+    <canvas id="model-canvas"></canvas>
+
+    <!-- Three.js and OrbitControls -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- SCENE SETUP ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x101010);
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ canvas: document.querySelector('#model-canvas'), antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.shadowMap.enabled = true;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.0;
+
+        // --- CONTROLS ---
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.minDistance = 2;
+        controls.maxDistance = 20;
+        controls.maxPolarAngle = Math.PI / 2 - 0.05;
+
+        // --- TEXTURE LOADER & MATERIALS ---
+        const loader = new THREE.TextureLoader();
+        const woodFloorTexture = loader.load('https://www.textures.com/system/gallery/photos/Wood/Planks/Clean/18029/WoodPlanksClean0022_1_S.jpg');
+        woodFloorTexture.wrapS = THREE.RepeatWrapping;
+        woodFloorTexture.wrapT = THREE.RepeatWrapping;
+        woodFloorTexture.repeat.set(8, 8);
+        const floorMaterial = new THREE.MeshStandardMaterial({ map: woodFloorTexture, roughness: 0.6, metalness: 0.1 });
+
+        const bookshelfMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.7 });
+        const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xf0e8d8, roughness: 0.9 });
+        const chairFabricMaterial = new THREE.MeshStandardMaterial({ color: 0x5a8a5a, roughness: 0.8 });
+        const lampMaterial = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.8, roughness: 0.3 });
+        const lampShadeMaterial = new THREE.MeshStandardMaterial({ color: 0xfff5e1 });
+        
+        // --- LIGHTING ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.1);
+        scene.add(ambientLight);
+        const hemisphereLight = new THREE.HemisphereLight(0xD1E8FF, 0xB38861, 0.2);
+        scene.add(hemisphereLight);
+
+        const sunLight = new THREE.DirectionalLight(0xffeeb1, 3.0);
+        sunLight.position.set(-15, 20, 10);
+        sunLight.castShadow = true;
+        sunLight.shadow.mapSize.width = 2048;
+        sunLight.shadow.mapSize.height = 2048;
+        scene.add(sunLight);
+
+        const moonLight = new THREE.DirectionalLight(0x77aaff, 0.1);
+        moonLight.position.set(15, 20, -10);
+        moonLight.visible = false;
+        scene.add(moonLight);
+
+        // --- GEOMETRY ---
+        const roomWidth = 25, roomHeight = 8, roomDepth = 20;
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(roomWidth, roomDepth), floorMaterial);
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        const backWall = new THREE.Mesh(new THREE.BoxGeometry(roomWidth, roomHeight, 0.2), wallMaterial);
+        backWall.position.set(0, roomHeight / 2, -roomDepth / 2);
+        backWall.receiveShadow = true;
+        scene.add(backWall);
+
+        const leftWall = new THREE.Mesh(new THREE.BoxGeometry(roomDepth, roomHeight, 0.2), wallMaterial);
+        leftWall.position.set(-roomWidth / 2, roomHeight / 2, 0);
+        leftWall.rotation.y = Math.PI / 2;
+        leftWall.receiveShadow = true;
+        scene.add(leftWall);
+        
+        function createBookshelf(width, height, depth, x, z, rotationY = 0) {
+            const group = new THREE.Group();
+            const frameMaterial = new THREE.MeshStandardMaterial({ color: 0x3d281a, roughness: 0.6 });
+            
+            const sideGeo = new THREE.BoxGeometry(depth, height, 0.2);
+            const leftSide = new THREE.Mesh(sideGeo, frameMaterial);
+            leftSide.position.x = -width / 2 + 0.1;
+            const rightSide = new THREE.Mesh(sideGeo, frameMaterial);
+            rightSide.position.x = width / 2 - 0.1;
+            const back = new THREE.Mesh(new THREE.BoxGeometry(width, height, 0.2), frameMaterial);
+            back.position.z = -depth / 2 + 0.1;
+            group.add(leftSide, rightSide, back);
+
+            const shelfGeo = new THREE.BoxGeometry(width - 0.4, 0.1, depth - 0.2);
+            const shelfCount = Math.floor(height / 1.2);
+
+            for (let s = 0; s < shelfCount; s++) {
+                const shelfY = -height / 2 + 0.6 + s * 1.2;
+                const shelf = new THREE.Mesh(shelfGeo, frameMaterial);
+                shelf.position.y = shelfY - 0.05;
+                group.add(shelf);
+                
+                let currentX = -width / 2 + 0.3;
+                while (currentX < width / 2 - 0.3) {
+                    const bookHeight = 0.8 + Math.random() * 0.2;
+                    const bookDepth = 0.6 + (Math.random() - 0.5) * 0.2;
+                    const bookWidth = 0.15 + Math.random() * 0.1;
+                    
+                    const bookGeo = new THREE.BoxGeometry(bookWidth, bookHeight, bookDepth);
+                    const bookMat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(Math.random(), 0.6, 0.5) });
+                    const book = new THREE.Mesh(bookGeo, bookMat);
+                    
+                    const tilt = (Math.random() - 0.5) * 0.2;
+                    book.rotation.z = tilt;
+                    
+                    book.position.set(currentX + bookWidth / 2, shelfY + bookHeight / 2, (Math.random() - 0.5) * (depth - bookDepth) * 0.5);
+                    
+                    book.castShadow = true;
+                    group.add(book);
+                    
+                    currentX += bookWidth + 0.05;
+                }
+            }
+            group.position.set(x, height / 2, z);
+            group.rotation.y = rotationY;
+            scene.add(group);
+        }
+        createBookshelf(roomWidth, roomHeight, 0.8, 0, -roomDepth/2 + 0.5);
+        createBookshelf(roomDepth - 2, roomHeight, 0.8, -roomWidth/2 + 0.5, 0, Math.PI / 2);
+
+        const interactiveObjects = [];
+        function createDeskAndChair(x, z) {
+            const group = new THREE.Group();
+            const desk = new THREE.Mesh(new THREE.BoxGeometry(2, 1, 1), bookshelfMaterial);
+            desk.position.y = 0.5;
+            desk.castShadow = true;
+            group.add(desk);
+
+            const chair = new THREE.Group();
+            const chairSeat = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.2, 0.8), chairFabricMaterial);
+            chairSeat.position.y = 0.5;
+            const chairBack = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.1), chairFabricMaterial);
+            chairBack.position.set(0, 1.1, 0.35);
+            chair.add(chairSeat, chairBack);
+            chair.position.z = 1;
+            chair.castShadow = true;
+            group.add(chair);
+
+            const lamp = new THREE.Group();
+            const lampBase = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 0.05, 16), lampMaterial);
+            const lampStem = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.5, 16), lampMaterial);
+            lampStem.position.y = 0.25;
+            const lampShade = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.2, 0.25, 16), lampShadeMaterial);
+            lampShade.position.y = 0.55;
+            lamp.add(lampBase, lampStem, lampShade);
+            lamp.position.set(-0.7, 1, -0.3);
+            
+            const lampLight = new THREE.PointLight(0xffd6a1, 20, 5);
+            lampLight.position.y = 0.55;
+            lampLight.castShadow = true;
+            lampLight.visible = false;
+            lamp.add(lampLight);
+            lamp.userData = { isLamp: true, light: lampLight };
+            interactiveObjects.push(lampShade);
+
+            group.add(lamp);
+            group.position.set(x, 0, z);
+            scene.add(group);
+        }
+        for (let i = 0; i < 3; i++) {
+            createDeskAndChair(-8 + i * 5, 2);
+        }
+
+        const fans = [];
+        function createCeilingFan(x, z) {
+            const fan = new THREE.Group();
+            const base = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.2, 16), lampMaterial);
+            fan.add(base);
+            const blades = new THREE.Group();
+            for (let i = 0; i < 4; i++) {
+                const blade = new THREE.Mesh(new THREE.BoxGeometry(2, 0.05, 0.4), bookshelfMaterial);
+                blade.position.x = 1.1;
+                const bladeHolder = new THREE.Group();
+                bladeHolder.add(blade);
+                bladeHolder.rotation.y = i * (Math.PI / 2);
+                blades.add(bladeHolder);
+            }
+            fan.add(blades);
+            fan.position.set(x, roomHeight - 0.5, z);
+            scene.add(fan);
+            fans.push(blades);
+        }
+        createCeilingFan(-5, 0);
+        createCeilingFan(5, 0);
+
+        const dustVertices = [];
+        for (let i = 0; i < 500; i++) {
+            dustVertices.push((Math.random() - 0.5) * roomWidth, Math.random() * roomHeight, (Math.random() - 0.5) * roomDepth);
+        }
+        const dustGeo = new THREE.BufferGeometry();
+        dustGeo.setAttribute('position', new THREE.Float32BufferAttribute(dustVertices, 3));
+        const dustMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.02, transparent: true, opacity: 0.3 });
+        const dust = new THREE.Points(dustGeo, dustMat);
+        scene.add(dust);
+
+        // --- STORY MODAL LOGIC ---
+        let storyModalOpen = false;
+        const storyModal = document.getElementById('story-modal');
+        const storyText = document.getElementById('story-text');
+        const closeStoryBtn = document.getElementById('close-story-btn');
+
+        closeStoryBtn.addEventListener('click', () => {
+            storyModal.style.display = 'none';
+            storyModalOpen = false;
+        });
+
+        // --- INTERACTIVITY ---
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        window.addEventListener('click', (event) => {
+            if (storyModalOpen) return;
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(interactiveObjects);
+            if (intersects.length > 0) {
+                const lampObject = intersects[0].object.parent;
+                if (lampObject.userData.isLamp) {
+                    const light = lampObject.userData.light;
+                    light.visible = !light.visible;
+                    lampObject.children[2].material.emissive.setHex(light.visible ? 0xffd6a1 : 0x000000);
+                }
+            }
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'KeyE' && !storyModalOpen) {
+                fetchStory();
+            }
+        });
+        
+        // --- UI LOGIC ---
+        const dayBtn = document.getElementById('day-btn');
+        const nightBtn = document.getElementById('night-btn');
+        
+        dayBtn.addEventListener('click', () => {
+            sunLight.visible = true;
+            moonLight.visible = false;
+            renderer.toneMappingExposure = 1.0;
+            dayBtn.classList.add('active');
+            nightBtn.classList.remove('active');
+        });
+
+        nightBtn.addEventListener('click', () => {
+            sunLight.visible = false;
+            moonLight.visible = true;
+            renderer.toneMappingExposure = 0.3;
+            nightBtn.classList.add('active');
+            dayBtn.classList.remove('active');
+        });
+
+        // --- GEMINI API FUNCTION ---
+        async function fetchStory() {
+            storyModalOpen = true;
+            storyModal.style.display = 'flex';
+            storyText.textContent = 'Summoning a story from the ether...';
+
+            try {
+                const response = await fetch("{{ url_for('get_story_from_api') }}", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    storyText.textContent = result.story;
+                } else {
+                    storyText.textContent = result.error || "An unknown error occurred.";
+                }
+            } catch (error) {
+                console.error("Error fetching story:", error);
+                storyText.textContent = "A magical interference prevented the story from appearing. Please check the connection and try again.";
+            }
+        }
+
+        // --- ANIMATION LOOP ---
+        const clock = new THREE.Clock();
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+            
+            controls.update();
+            fans.forEach(fan => fan.rotation.y += 2 * delta);
+            
+            const positions = dust.geometry.attributes.position.array;
+            for(let i=0; i < positions.length; i+=3) {
+                positions[i+1] -= 0.01 * delta;
+                if (positions[i+1] < 0) positions[i+1] = roomHeight;
+            }
+            dust.geometry.attributes.position.needsUpdate = true;
+
+            renderer.render(scene, camera);
+        }
+
+        // --- RESIZE HANDLING ---
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        camera.position.set(8, 5, 12);
+        animate();
+    </script>
+</body>
+</html>
