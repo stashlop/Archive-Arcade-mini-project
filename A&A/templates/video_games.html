@@ -40,6 +40,20 @@
         #cart-modal { position:fixed; right:1rem; top:4rem; background:rgba(0,0,0,0.85); color:#fff; padding:1rem; border-radius:8px; display:none; z-index:5000; min-width:260px; }
         #cart-items { margin:0.5rem 0; padding-left:1rem; max-height:40vh; overflow:auto; }
         #cart-modal button { padding:0.4rem 0.6rem; border-radius:6px; border:none; cursor:pointer; }
+
+        /* payment modal */
+        #payment-modal { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); width:360px; max-width:calc(100% - 2rem); background:rgba(8,8,8,0.95); color:#fff; border-radius:10px; padding:1rem; box-shadow:0 10px 40px rgba(0,0,0,0.6); z-index:6000; display:none; }
+        #payment-modal header { display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem; }
+        #payment-modal label { display:block; font-size:0.9rem; margin-top:0.6rem; color:#e6e6e6; }
+        #payment-modal input[type="text"], #payment-modal input[type="email"], #payment-modal input[type="tel"], #payment-modal select { width:100%; padding:0.5rem; border-radius:6px; border:1px solid rgba(255,255,255,0.08); background:transparent; color:inherit; margin-top:0.25rem; }
+        #payment-modal .row { display:flex; gap:0.5rem; }
+        #payment-modal .muted { font-size:0.85rem; color:#cfcfcf; margin-top:0.4rem; }
+        #payment-modal .pay-actions { display:flex; justify-content:flex-end; gap:0.5rem; margin-top:0.75rem; }
+        #payment-modal .btn { padding:0.5rem 0.6rem; border-radius:6px; border:none; cursor:pointer; }
+        #payment-modal .btn.primary { background:linear-gradient(90deg,#16a085,#30c7ec); color:#fff; }
+        #payment-modal .btn.ghost { background:transparent; border:1px solid rgba(255,255,255,0.08); color:#fff; }
+
+        .processing { opacity:0.6; pointer-events:none; }
     </style>
 </head>
 <body class="antialiased">
@@ -84,35 +98,7 @@
             <section class="explore-store" aria-label="Explore Games">
                 <h2 style="margin-top:0;">Explore & Shop</h2>
                 <div class="games-grid">
-                    <article class="game-card" data-id="1" data-title="Neo Racer" data-buy="19.99" data-rent="4.99">
-                        <img src="{{ url_for('static', filename='images/game1.jpg') }}" alt="Neo Racer">
-                        <h3>Neo Racer</h3>
-                        <p class="game-desc">High-speed synthwave racing.</p>
-                        <div class="game-actions">
-                            <button class="buy-btn">Buy $19.99</button>
-                            <button class="rent-btn">Rent $4.99</button>
-                        </div>
-                    </article>
-
-                    <article class="game-card" data-id="2" data-title="Mystic Library" data-buy="14.99" data-rent="3.99">
-                        <img src="{{ url_for('static', filename='images/game2.jpg') }}" alt="Mystic Library">
-                        <h3>Mystic Library</h3>
-                        <p class="game-desc">Puzzle adventure among enchanted stacks.</p>
-                        <div class="game-actions">
-                            <button class="buy-btn">Buy $14.99</button>
-                            <button class="rent-btn">Rent $3.99</button>
-                        </div>
-                    </article>
-
-                    <article class="game-card" data-id="3" data-title="Pixel Brawl" data-buy="9.99" data-rent="2.49">
-                        <img src="{{ url_for('static', filename='images/game3.jpg') }}" alt="Pixel Brawl">
-                        <h3>Pixel Brawl</h3>
-                        <p class="game-desc">Fast retro arena combat.</p>
-                        <div class="game-actions">
-                            <button class="buy-btn">Buy $9.99</button>
-                            <button class="rent-btn">Rent $2.49</button>
-                        </div>
-                    </article>
+                   
 
                     <article class="game-card" data-id="4" data-title="Baldur's Gate 3" data-buy="59.99" data-rent="9.99">
                         <img src="{{ url_for('static', filename='Baldurs_Gate_3.jpeg') }}" alt="Baldur's Gate 3">
@@ -135,7 +121,7 @@
                     </article>
 
                     <article class="game-card" data-id="6" data-title="Cyberpunk 2077" data-buy="29.99" data-rent="6.99">
-                        <img src="{{ url_for('static', filename='images/game6.jpg') }}" alt="Cyberpunk 2077">
+                        <img src="{{ url_for('static', filename='cyberpunk.jpeg') }}" alt="Cyberpunk 2077">
                         <h3>Cyberpunk 2077</h3>
                         <p class="game-desc">Open-world RPG in a neon-soaked metropolis.</p>
                         <div class="game-actions">
@@ -145,7 +131,7 @@
                     </article>
 
                     <article class="game-card" data-id="7" data-title="Red Dead Redemption 2" data-buy="39.99" data-rent="8.99">
-                        <img src="{{ url_for('static', filename='images/game7.jpg') }}" alt="Red Dead Redemption 2">
+                        <img src="{{ url_for('static', filename='red.jpeg') }}" alt="Red Dead Redemption 2">
                         <h3>Red Dead Redemption 2</h3>
                         <p class="game-desc">Open-world western with cinematic storytelling.</p>
                         <div class="game-actions">
@@ -155,7 +141,7 @@
                     </article>
 
                     <article class="game-card" data-id="8" data-title="The Witcher 3: Wild Hunt" data-buy="29.99" data-rent="6.49">
-                        <img src="{{ url_for('static', filename='images/game8.jpg') }}" alt="The Witcher 3">
+                        <img src="{{ url_for('static', filename='witcher.jpeg') }}" alt="The Witcher 3">
                         <h3>The Witcher 3: Wild Hunt</h3>
                         <p class="game-desc">Open-world RPG full of monsters, stories, and choices.</p>
                         <div class="game-actions">
@@ -165,7 +151,7 @@
                     </article>
 
                     <article class="game-card" data-id="9" data-title="The Last of Us: Part I & II" data-buy="49.99" data-rent="9.49">
-                        <img src="{{ url_for('static', filename='images/game9.jpg') }}" alt="The Last of Us">
+                        <img src="{{ url_for('static', filename='last.jpeg') }}" alt="The Last of Us">
                         <h3>The Last of Us: Part I & II</h3>
                         <p class="game-desc">Emotional narrative-driven action-adventure series.</p>
                         <div class="game-actions">
@@ -175,7 +161,7 @@
                     </article>
 
                     <article class="game-card" data-id="10" data-title="God of War (2018)" data-buy="29.99" data-rent="6.99">
-                        <img src="{{ url_for('static', filename='images/game10.jpg') }}" alt="God of War (2018)">
+                        <img src="{{ url_for('static', filename='god.jpeg') }}" alt="God of War (2018)">
                         <h3>God of War (2018)</h3>
                         <p class="game-desc">A mythic reimagining: father, son, and monsters.</p>
                         <div class="game-actions">
@@ -185,7 +171,7 @@
                     </article>
 
                     <article class="game-card" data-id="11" data-title="Disco Elysium" data-buy="19.99" data-rent="4.49">
-                        <img src="{{ url_for('static', filename='images/game11.jpg') }}" alt="Disco Elysium">
+                        <img src="{{ url_for('static', filename='Disco.jpeg') }}" alt="Disco Elysium">
                         <h3>Disco Elysium</h3>
                         <p class="game-desc">A groundbreaking RPG focused on choice, dialogue, and investigation.</p>
                         <div class="game-actions">
@@ -195,7 +181,7 @@
                     </article>
 
                     <article class="game-card" data-id="12" data-title="Silent Hill 2 (Remake)" data-buy="39.99" data-rent="8.49">
-                        <img src="{{ url_for('static', filename='images/game12.jpg') }}" alt="Silent Hill 2 (Remake)">
+                        <img src="{{ url_for('static', filename='hill.jpeg') }}" alt="Silent Hill 2 (Remake)">
                         <h3>Silent Hill 2 (Remake)</h3>
                         <p class="game-desc">Reimagined survival-horror classic with modern visuals.</p>
                         <div class="game-actions">
@@ -220,6 +206,53 @@
             <button id="checkout">Checkout</button>
             <button id="close-cart">Close</button>
         </div>
+    </div>
+
+    <!-- Payment modal (demo client-side simulation) -->
+    <div id="payment-modal" role="dialog" aria-hidden="true" aria-labelledby="payment-title">
+        <header>
+            <h3 id="payment-title" style="margin:0;">Checkout — Demo Payment</h3>
+            <button id="close-payment" title="Close">✕</button>
+        </header>
+
+        <form id="payment-form" novalidate>
+            <div class="muted">Cart total: <strong id="payment-total">$0.00</strong></div>
+
+            <label for="payer-name">Name</label>
+            <input id="payer-name" name="name" type="text" required placeholder="Jane Doe">
+
+            <label for="payer-email">Email</label>
+            <input id="payer-email" name="email" type="email" required placeholder="jane@example.com">
+
+            <label>Payment method</label>
+            <div style="display:flex; gap:.5rem; align-items:center; margin-top:.25rem;">
+                <label style="font-size:.95rem;"><input type="radio" name="pm" value="card" checked> Card</label>
+                <label style="font-size:.95rem;"><input type="radio" name="pm" value="demo"> Demo (no charge)</label>
+            </div>
+
+            <div id="card-fields">
+                <label for="card-number">Card number</label>
+                <input id="card-number" name="card" type="tel" inputmode="numeric" placeholder="4242 4242 4242 4242">
+
+                <div class="row">
+                    <div style="flex:1;">
+                        <label for="card-exp">Expiry (MM/YY)</label>
+                        <input id="card-exp" name="exp" type="text" placeholder="04/28">
+                    </div>
+                    <div style="width:110px;">
+                        <label for="card-cvc">CVC</label>
+                        <input id="card-cvc" name="cvc" type="text" placeholder="123">
+                    </div>
+                </div>
+            </div>
+
+            <div class="pay-actions">
+                <button type="button" class="btn ghost" id="fill-demo">Fill demo card</button>
+                <button type="submit" class="btn primary" id="pay-submit">Pay</button>
+            </div>
+
+            <div id="payment-message" class="muted" style="margin-top:.5rem"></div>
+        </form>
     </div>
 
     <script>
@@ -324,13 +357,120 @@
             cartModal.setAttribute('aria-hidden','true');
         });
 
+        // replaced checkout behavior: open payment modal
+        const paymentModal = document.getElementById('payment-modal');
+        const paymentForm = document.getElementById('payment-form');
+        const payTotal = document.getElementById('payment-total');
+        const paymentMessage = document.getElementById('payment-message');
+        const closePaymentBtn = document.getElementById('close-payment');
+        const fillDemoBtn = document.getElementById('fill-demo');
+        const cardFields = document.getElementById('card-fields');
+
+        function cartTotal() {
+            return cart.reduce((s,i)=> s + parseFloat(i.price), 0).toFixed(2);
+        }
+
+        function openPaymentModal() {
+            payTotal.textContent = `$${cartTotal()}`;
+            paymentMessage.textContent = '';
+            paymentForm.classList.remove('processing');
+            paymentModal.style.display = 'block';
+            paymentModal.setAttribute('aria-hidden','false');
+            // show/hide card fields based on selection
+            const sel = paymentForm.querySelector('input[name="pm"]:checked').value;
+            cardFields.style.display = sel === 'demo' ? 'none' : 'block';
+        }
+
+        function closePaymentModal() {
+            paymentModal.style.display = 'none';
+            paymentModal.setAttribute('aria-hidden','true');
+        }
+
         checkoutBtn.addEventListener('click', () => {
             if (cart.length === 0) { alert('Cart is empty'); return; }
-            const total = cart.reduce((s,i)=> s + parseFloat(i.price), 0).toFixed(2);
-            alert(`Checkout — total $${total}. (Integrate payment gateway to complete purchase.)`);
-            cart.length = 0;
-            updateCartUI();
-            cartModal.style.display = 'none';
+            // open payment modal
+            openPaymentModal();
+        });
+
+        closePaymentBtn.addEventListener('click', () => closePaymentModal());
+
+        // toggle card fields when payment method changes
+        paymentForm.querySelectorAll('input[name="pm"]').forEach(r => {
+            r.addEventListener('change', (e) => {
+                cardFields.style.display = e.target.value === 'demo' ? 'none' : 'block';
+            });
+        });
+
+        // prefill demo card values
+        fillDemoBtn.addEventListener('click', () => {
+            document.getElementById('card-number').value = '4242 4242 4242 4242';
+            document.getElementById('card-exp').value = '12/29';
+            document.getElementById('card-cvc').value = '123';
+            document.getElementById('payer-name').focus();
+            paymentMessage.textContent = 'Demo card filled. Select Demo to avoid real processing.';
+        });
+
+        // simple client-side validation and demo processing
+        paymentForm.addEventListener('submit', (ev) => {
+            ev.preventDefault();
+            paymentMessage.textContent = '';
+            const name = document.getElementById('payer-name').value.trim();
+            const email = document.getElementById('payer-email').value.trim();
+            const pm = paymentForm.querySelector('input[name="pm"]:checked').value;
+
+            if (!name || !email) {
+                paymentMessage.textContent = 'Name and email are required.';
+                return;
+            }
+
+            if (pm === 'demo') {
+                // demo flow: no real charge
+                paymentMessage.textContent = 'Processing demo payment...';
+                paymentForm.classList.add('processing');
+                setTimeout(() => {
+                    paymentMessage.textContent = 'Demo payment successful. Thank you!';
+                    cart.length = 0;
+                    updateCartUI();
+                    paymentForm.classList.remove('processing');
+                    setTimeout(() => { closePaymentModal(); cartModal.style.display = 'none'; }, 900);
+                }, 1000);
+                return;
+            }
+
+            // card flow (simulated): basic checks
+            const card = document.getElementById('card-number').value.replace(/\s+/g,'');
+            const exp = document.getElementById('card-exp').value.trim();
+            const cvc = document.getElementById('card-cvc').value.trim();
+
+            if (!/^\d{15,19}$/.test(card)) {
+                paymentMessage.textContent = 'Enter a valid card number (digits only).';
+                return;
+            }
+            if (!/^\d{2}\/\d{2}$/.test(exp)) {
+                paymentMessage.textContent = 'Expiry must be MM/YY.';
+                return;
+            }
+            if (!/^\d{3,4}$/.test(cvc)) {
+                paymentMessage.textContent = 'CVC must be 3 or 4 digits.';
+                return;
+            }
+
+            // simulated processing
+            paymentMessage.textContent = 'Processing payment...';
+            paymentForm.classList.add('processing');
+            setTimeout(() => {
+                // accept demo test card 4242... or randomly succeed
+                if (card.startsWith('4242') || Math.random() > 0.1) {
+                    paymentMessage.textContent = 'Payment successful. Thank you!';
+                    cart.length = 0;
+                    updateCartUI();
+                    paymentForm.classList.remove('processing');
+                    setTimeout(() => { closePaymentModal(); cartModal.style.display = 'none'; }, 900);
+                } else {
+                    paymentMessage.textContent = 'Payment failed. Try another card or choose Demo.';
+                    paymentForm.classList.remove('processing');
+                }
+            }, 1400);
         });
 
         // initial UI update
