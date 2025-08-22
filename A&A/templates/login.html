@@ -1,33 +1,37 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Login</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link href="https://fonts.googleapis.com/css2?family=Fira+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+      body{font-family:sans-serif;background:#071019;color:#fff;padding:2rem}
+      .card{max-width:420px;margin:2rem auto;padding:1rem;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.04)}
+      input{width:100%;padding:.6rem;margin:.45rem 0;border-radius:6px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit}
+      button{padding:.6rem 0.9rem;border-radius:6px;border:none;background:linear-gradient(90deg,#16a085,#30c7ec);color:#fff;cursor:pointer}
+      .muted{color:#cfcfcf;font-size:.95rem}
+    </style>
 </head>
 <body>
-    <video autoplay loop id="bg-video">
-        <source src="{{ url_for('static', filename='ad.mp4') }}" type="video/mp4">
-        Your browser does not support the video tag.
-    </video>
-    <div class="auth-container">
-        <div class="auth-tabs">
-            <button class="auth-tab active">Login</button>
-            <a href="{{ url_for('signup') }}"><button class="auth-tab">Sign Up</button></a>
+  <div class="card">
+    <h2>Sign in</h2>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="muted">
+        {% for cat,msg in messages %}
+          <div>{{ msg }}</div>
+        {% endfor %}
         </div>
-        <h2 style="margin-bottom:1rem;">Login</h2>
-        {% with messages = get_flashed_messages() %}
-          {% if messages %}
-            <div class="flash">{{ messages[0] }}</div>
-          {% endif %}
-        {% endwith %}
-        <form method="post">
-            <input type="text" name="username" placeholder="Username" required>
-            <input type="password" name="password" placeholder="Password" required>
-            <button type="submit">Login</button>
-        </form>
-        <p style="margin-top:1rem;">Don't have an account? <a href="{{ url_for('signup') }}">Sign up</a></p>
-    </div>
+      {% endif %}
+    {% endwith %}
+    <form method="post" action="{{ url_for('login') }}">
+      <label>Username or Email<input name="ident" required></label>
+      <label>Password<input name="password" type="password" required></label>
+      <div style="display:flex;gap:.5rem;justify-content:space-between;align-items:center;margin-top:.6rem">
+        <button type="submit">Login</button>
+        <a href="{{ url_for('signup') }}" style="color:#cfcfcf;text-decoration:none">Create account</a>
+      </div>
+    </form>
+  </div>
 </body>
-</html> 
+</html>

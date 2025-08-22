@@ -6,6 +6,16 @@
     <title>Video Games - Arcade and Archives</title>
     <style>
         body { margin: 0; font-family: sans-serif; color: white; }
+        /* search & categories */
+        .store-controls { display:flex; gap:1rem; align-items:center; justify-content:space-between; margin-bottom:0.75rem; flex-wrap:wrap; }
+        .search-bar { display:flex; gap:.5rem; align-items:center; flex:1; max-width:640px; }
+        .search-input { flex:1; padding:.5rem .7rem; border-radius:8px; border:1px solid rgba(255,255,255,0.06); background:rgba(0,0,0,0.25); color:inherit; }
+        .categories { display:flex; gap:.5rem; align-items:center; overflow:auto; padding:0.25rem 0; }
+        .category-btn { padding:.4rem .6rem; border-radius:999px; border:1px solid rgba(255,255,255,0.06); background:transparent; color:inherit; font-size:.9rem; cursor:pointer; white-space:nowrap; }
+        .category-btn.active { background:linear-gradient(90deg,#16a085,#30c7ec); color:#fff; border:none; }
+        .results-meta { color:#cfcfcf; font-size:.95rem; margin-left:1rem; min-width:120px; text-align:right; }
+
+        body { margin: 0; font-family: sans-serif; color: white; }
         .spline-background { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -2; overflow: hidden; }
         #bg-video { width: 100%; height: 100%; object-fit: cover; display: block; }
         .main-header, .hero-section { position: relative; z-index: 2; }
@@ -109,98 +119,34 @@
             <section class="explore-store" aria-label="Explore Games">
                 <h2 style="margin-top:0;">Explore & Shop</h2>
                 <div class="games-grid">
-                   
-
-                    <article class="game-card" data-id="4" data-title="Baldur's Gate 3" data-buy="59.99" data-rent="9.99">
-                        <img src="{{ url_for('static', filename='Baldurs_Gate_3.jpeg') }}" alt="Baldur's Gate 3">
-                        <h3>Baldur's Gate 3</h3>
-                        <p class="game-desc">Epic CRPG adventure with deep choices and co-op.</p>
+                    <!-- store controls: search + categories -->
+                    <div class="store-controls" style="grid-column:1/-1;">
+                        <div class="search-bar" role="search" aria-label="Search games">
+                            <input id="search-input" class="search-input" type="search" placeholder="Search games, genres, keywords (e.g. 'RPG', 'horror')">
+                            <button id="clear-search" class="category-btn" title="Clear search">Clear</button>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:.5rem">
+                            <div id="categories" class="categories" aria-label="Categories"></div>
+                            <div id="results-meta" class="results-meta" aria-hidden="true"></div>
+                        </div>
+                    </div>
+                    
+                    {%- for g in games %}
+                    <article class="game-card" data-id="{{ g.id }}" data-title="{{ g.title }}" data-category="{{ g.category }}" data-buy="{{ '%.2f'|format(g.buy_price) }}" data-rent="{{ '%.2f'|format(g.rent_price) }}">
+                        {% if g.image %}
+                        <img src="{{ url_for('static', filename=g.image) }}" alt="{{ g.title }}">
+                        {% endif %}
+                        <h3>{{ g.title }}</h3>
+                        <p class="game-desc">{{ g.description }}</p>
                         <div class="game-actions">
-                            <button class="buy-btn">Buy $59.99</button>
-                            <button class="rent-btn">Rent $9.99</button>
+                            <button class="buy-btn">Buy ${{ '%.2f'|format(g.buy_price) }}</button>
+                            <button class="rent-btn">Rent ${{ '%.2f'|format(g.rent_price) }}</button>
                         </div>
                     </article>
-
-                    <article class="game-card" data-id="5" data-title="Alan Wake 2" data-buy="49.99" data-rent="7.99">
-                        <img src="{{ url_for('static', filename='Alan_Wake_2.jpeg') }}" alt="Alan Wake 2">
-                        <h3>Alan Wake 2</h3>
-                        <p class="game-desc">Psychological horror thriller with cinematic storytelling.</p>
-                        <div class="game-actions">
-                            <button class="buy-btn">Buy $49.99</button>
-                            <button class="rent-btn">Rent $7.99</button>
-                        </div>
-                    </article>
-
-                    <article class="game-card" data-id="6" data-title="Cyberpunk 2077" data-buy="29.99" data-rent="6.99">
-                        <img src="{{ url_for('static', filename='cyberpunk.jpeg') }}" alt="Cyberpunk 2077">
-                        <h3>Cyberpunk 2077</h3>
-                        <p class="game-desc">Open-world RPG in a neon-soaked metropolis.</p>
-                        <div class="game-actions">
-                            <button class="buy-btn">Buy $29.99</button>
-                            <button class="rent-btn">Rent $6.99</button>
-                        </div>
-                    </article>
-
-                    <article class="game-card" data-id="7" data-title="Red Dead Redemption 2" data-buy="39.99" data-rent="8.99">
-                        <img src="{{ url_for('static', filename='red.jpeg') }}" alt="Red Dead Redemption 2">
-                        <h3>Red Dead Redemption 2</h3>
-                        <p class="game-desc">Open-world western with cinematic storytelling.</p>
-                        <div class="game-actions">
-                            <button class="buy-btn">Buy $39.99</button>
-                            <button class="rent-btn">Rent $8.99</button>
-                        </div>
-                    </article>
-
-                    <article class="game-card" data-id="8" data-title="The Witcher 3: Wild Hunt" data-buy="29.99" data-rent="6.49">
-                        <img src="{{ url_for('static', filename='witcher.jpeg') }}" alt="The Witcher 3">
-                        <h3>The Witcher 3: Wild Hunt</h3>
-                        <p class="game-desc">Open-world RPG full of monsters, stories, and choices.</p>
-                        <div class="game-actions">
-                            <button class="buy-btn">Buy $29.99</button>
-                            <button class="rent-btn">Rent $6.49</button>
-                        </div>
-                    </article>
-
-                    <article class="game-card" data-id="9" data-title="The Last of Us: Part I & II" data-buy="49.99" data-rent="9.49">
-                        <img src="{{ url_for('static', filename='last.jpeg') }}" alt="The Last of Us">
-                        <h3>The Last of Us: Part I & II</h3>
-                        <p class="game-desc">Emotional narrative-driven action-adventure series.</p>
-                        <div class="game-actions">
-                            <button class="buy-btn">Buy $49.99</button>
-                            <button class="rent-btn">Rent $9.49</button>
-                        </div>
-                    </article>
-
-                    <article class="game-card" data-id="10" data-title="God of War (2018)" data-buy="29.99" data-rent="6.99">
-                        <img src="{{ url_for('static', filename='god.jpeg') }}" alt="God of War (2018)">
-                        <h3>God of War (2018)</h3>
-                        <p class="game-desc">A mythic reimagining: father, son, and monsters.</p>
-                        <div class="game-actions">
-                            <button class="buy-btn">Buy $29.99</button>
-                            <button class="rent-btn">Rent $6.99</button>
-                        </div>
-                    </article>
-
-                    <article class="game-card" data-id="11" data-title="Disco Elysium" data-buy="19.99" data-rent="4.49">
-                        <img src="{{ url_for('static', filename='Disco.jpeg') }}" alt="Disco Elysium">
-                        <h3>Disco Elysium</h3>
-                        <p class="game-desc">A groundbreaking RPG focused on choice, dialogue, and investigation.</p>
-                        <div class="game-actions">
-                            <button class="buy-btn">Buy $19.99</button>
-                            <button class="rent-btn">Rent $4.49</button>
-                        </div>
-                    </article>
-
-                    <article class="game-card" data-id="12" data-title="Silent Hill 2 (Remake)" data-buy="39.99" data-rent="8.49">
-                        <img src="{{ url_for('static', filename='hill.jpeg') }}" alt="Silent Hill 2 (Remake)">
-                        <h3>Silent Hill 2 (Remake)</h3>
-                        <p class="game-desc">Reimagined survival-horror classic with modern visuals.</p>
-                        <div class="game-actions">
-                            <button class="buy-btn">Buy $39.99</button>
-                            <button class="rent-btn">Rent $8.49</button>
-                        </div>
-                    </article>
-                </div>
+                    {%- else %}
+                    <div class="card">No games available.</div>
+                    {%- endfor %}
+                 </div>
 
                 <div id="cart-bar" aria-live="polite" style="margin-top:1rem;">
                     Cart: <span id="cart-count">0</span> items — <button id="view-cart">View</button>
@@ -277,6 +223,32 @@
     </div>
 
     <script>
+        // expose login state to client scripts (Jinja)
+        window.App = window.App || {};
+        App.userLoggedIn = "{{ 'true' if session.get('user_id') else 'false' }}";
+        App.loginUrl = "{{ url_for('login') }}";
+        App.loginNextParam = function(nextPath){
+            return App.loginUrl + '?next=' + encodeURIComponent(nextPath || window.location.pathname);
+        };
+
+        // disable purchase controls for anonymous users and show prompt
+        function ensureAuthOrRedirect(nextPath){
+            if (App.userLoggedIn !== true && App.userLoggedIn !== 'true') {
+                if (confirm('You must sign in to access purchases and renting. Go to sign in now?')) {
+                    window.location.href = App.loginNextParam(nextPath);
+                }
+                return false;
+            }
+            return true;
+        }
+        // run once: mark buttons requiring auth
+        document.querySelectorAll('.buy-btn, .rent-btn').forEach(btn=>{
+            // show disabled hint client-side if not logged in
+            if (App.userLoggedIn !== true && App.userLoggedIn !== 'true') {
+                btn.setAttribute('data-requires-auth','1');
+            }
+        });
+
         const logoLink = document.querySelector('.logo-link');
         const logoVideo = logoLink ? logoLink.querySelector('.logo-video') : null;
         if (logoLink && logoVideo) {
@@ -394,27 +366,31 @@
             });
         }
 
-        document.querySelectorAll('.buy-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const card = e.target.closest('.game-card');
+        document.querySelectorAll('.buy-btn').forEach(btn=>{
+            btn.addEventListener('click', e=>{
+                // require auth
+                if (!ensureAuthOrRedirect(window.location.pathname)) return;
+                const card = e.target.closest('.game-card, .card');
                 const title = card.dataset.title;
                 const price = card.dataset.buy;
                 cart.push({ id: card.dataset.id, title, type: 'Buy', price });
                 updateCartUI();
-                alert(`${title} added to cart (Buy $${price})`);
+                alert(`${title} added to cart — $${price}`);
             });
         });
 
-        document.querySelectorAll('.rent-btn').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                const card = e.target.closest('.game-card');
+        document.querySelectorAll('.rent-btn').forEach(btn=>{
+            btn.addEventListener('click', e=>{
+                // require auth
+                if (!ensureAuthOrRedirect(window.location.pathname)) return;
+                const card = e.target.closest('.game-card, .card');
                 const title = card.dataset.title;
-                const basePrice = parseFloat(card.dataset.rent);
+                const base = parseFloat(card.dataset.rent || '0');
                 let days = prompt('Rent days (1,3,7):', '1');
                 if (!days) return;
                 days = parseInt(days,10);
-                if (![1,3,7].includes(days)) { alert('Choose 1, 3 or 7 days.'); return; }
-                const price = (basePrice * days).toFixed(2);
+                if (![1,3,7].includes(days)) { alert('Choose 1,3 or 7 days'); return; }
+                const price = (base * days).toFixed(2);
                 cart.push({ id: card.dataset.id, title, type: `Rent ${days}d`, price });
                 updateCartUI();
                 alert(`${title} added to cart (Rent ${days}d — $${price})`);
@@ -567,6 +543,89 @@
                 }
             }, 1400);
         });
+
+        // categories + search for games
+        const searchInput = document.getElementById('search-input');
+        const clearSearchBtn = document.getElementById('clear-search');
+        const categoriesEl = document.getElementById('categories');
+        const resultsMeta = document.getElementById('results-meta');
+        const gameCards = Array.from(document.querySelectorAll('.game-card'));
+
+        function buildCategories() {
+            const cats = new Set();
+            gameCards.forEach(c => {
+                const v = (c.dataset.category || '').split(',').map(s=>s.trim()).filter(Boolean);
+                v.forEach(x => cats.add(x));
+            });
+            const allBtn = document.createElement('button');
+            allBtn.textContent = 'All';
+            allBtn.className = 'category-btn active';
+            allBtn.dataset.cat = '';
+            categoriesEl.appendChild(allBtn);
+            Array.from(cats).sort().forEach(cat => {
+                const b = document.createElement('button');
+                b.textContent = cat;
+                b.className = 'category-btn';
+                b.dataset.cat = cat;
+                categoriesEl.appendChild(b);
+            });
+        }
+
+        let activeCategory = '';
+        function setActiveCategory(catBtn) {
+            Array.from(categoriesEl.children).forEach(b => b.classList.remove('active'));
+            if (catBtn) {
+                catBtn.classList.add('active');
+                activeCategory = catBtn.dataset.cat || '';
+            } else {
+                activeCategory = '';
+            }
+            applyFilters();
+        }
+
+        function applyFilters() {
+            const q = (searchInput?.value || '').trim().toLowerCase();
+            let visible = 0;
+            gameCards.forEach(card => {
+                const title = (card.dataset.title || '').toLowerCase();
+                const desc = (card.querySelector('.game-desc')?.textContent || '').toLowerCase();
+                const cats = (card.dataset.category || '').toLowerCase();
+                const matchesQuery = !q || title.includes(q) || desc.includes(q) || cats.includes(q);
+                const matchesCat = !activeCategory || cats.split(',').map(s=>s.trim()).includes(activeCategory.toLowerCase());
+                const show = matchesQuery && matchesCat;
+                card.style.display = show ? '' : 'none';
+                if (show) visible++;
+            });
+            resultsMeta.textContent = `${visible} / ${gameCards.length}`;
+        }
+
+        // debounce helper
+        function debounce(fn, wait=250){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), wait); }; }
+
+        // build controls
+        buildCategories();
+        categoriesEl.addEventListener('click', (e)=> {
+            const b = e.target.closest('.category-btn');
+            if (!b) return;
+            // toggle "All" or select specific
+            if (b.dataset.cat === '') {
+                setActiveCategory(b);
+            } else {
+                setActiveCategory(b);
+            }
+        });
+
+        searchInput?.addEventListener('input', debounce(()=> applyFilters(), 300));
+        clearSearchBtn?.addEventListener('click', ()=> { if (searchInput) { searchInput.value=''; applyFilters(); searchInput.focus(); } });
+        // initial filter state
+        applyFilters();
+        // visually disable purchase controls if anonymous
+        if (App.userLoggedIn !== true && App.userLoggedIn !== 'true') {
+            document.querySelectorAll('[data-requires-auth]').forEach(b => {
+                b.style.opacity = '0.7';
+                b.title = 'Sign in required';
+            });
+        }
 
         // history modal handlers
         if (historyBtn) {

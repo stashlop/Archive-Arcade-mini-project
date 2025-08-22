@@ -1,8 +1,19 @@
 import os
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
+from flask import Flask, render_template, request, session, redirect, url_for
+from flask import flash, jsonify
 import requests
 from werkzeug.security import generate_password_hash, check_password_hash
 from models import db, User
+
+# import blueprints safely (package vs script execution)
+try:
+    from .games_api import games_bp
+except Exception:
+    from games_api import games_bp
+try:
+    from .auth import auth_bp, init_app as init_auth_db
+except Exception:
+    from auth import auth_bp, init_app as init_auth_db
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'
@@ -79,30 +90,35 @@ def cafe():
         return redirect(url_for('login'))
     return render_template('cafe.html')
 
-@app.route('/api/get-story', methods=['POST'])
-def get_story_from_api():
-    api_key = os.getenv('GEMINI_API_KEY')
-    if not api_key:
-        return jsonify({'error': 'API key is not configured on the server.'}), 500
 
-    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
-    prompt = "Tell me a short, enchanting story (around 150 words) that one might discover in a forgotten corner of a magical library. It should be mysterious and slightly whimsical."
-    payload = {"contents": [{"parts": [{"text": prompt}]}]}
 
-    try:
-        response = requests.post(api_url, json=payload)
-        response.raise_for_status()
-        result = response.json()
+def create_app(config=None):
+    from flask import Flask
+    app = Flask(__name__, instance_relative_config=True)
+    app.secret_key = app.config.get('SECRET_KEY') or 'dev-secret-key-change-me'
+    # ensure a secret key for session (override with env or config in production)
 
-        if result.get('candidates'):
-            story = result['candidates'][0]['content']['parts'][0]['text']
-            return jsonify({'story': story})
-        else:
-            return jsonify({'error': "The library's magic is faint today. Please try again later."}), 500
-    except requests.exceptions.RequestException as e:
-        print(f"API request failed: {e}")
-        return jsonify({'error': 'A magical interference prevented the story from appearing.'}), 500
+    # register blueprints
+    app.register_blueprint(games_bp)
+    app.register_blueprint(auth_bp)
 
+    # initialize auth DB now that app exists
+    init_auth_db(app)
+
+    # enforce login for protected paths (books, video games, purchase/rent actions)
+    RESTRICTED_PREFIXES = ('/books', '/video_games', '/purchase', '/rent', '/checkout', '/cart', '/api/purchase')
+
+    @app.before_request
+    def require_login_for_restricted():
+        # allow static, public endpoints and API admin/seed
+        path = request.path or '/'
+        # ignore safe endpoints
+        if any(path.startswith(p) for p in RESTRICTED_PREFIXES):
+            if not session.get('user_id'):
+                # redirect to login and include `next` so user returns after auth
+                return redirect(url_for('login', next=path))
+
+    return app
 
 if __name__ == '__main__':
     app.run(debug=True)

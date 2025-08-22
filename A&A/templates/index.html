@@ -1,29 +1,245 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Sign Up</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link href="https://fonts.googleapis.com/css2?family=Fira+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>About — Arcade and Archives</title>
+  <style>
+    :root{
+      --container:1100px;
+      --bg-overlay: rgba(3,6,10,0.6);
+      --card-bg: rgba(255,255,255,0.03);
+      --muted: #cfcfcf;
+      --accent-1: #16a085;
+      --accent-2: #30c7ec;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family:Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      color:#fff;
+      background:#071019;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+    }
+
+    /* background video fullbleed */
+    .spline-background{position:fixed;inset:0;z-index:-3;overflow:hidden}
+    #bg-video{width:100%;height:100%;object-fit:cover;display:block;filter:brightness(.55) saturate(.95);}
+
+    /* top overlay so text is readable */
+    .bg-overlay{position:fixed;inset:0;z-index:-2;background:linear-gradient(180deg, rgba(4,6,10,0.55) 0%, rgba(4,6,10,0.75) 100%)}
+
+    .main-container{max-width:var(--container);margin:0 auto;padding:1.25rem;position:relative;z-index:2}
+
+    /* header */
+    .main-header{display:flex;justify-content:space-between;align-items:center;padding:1rem 0}
+    .logo-text{font-weight:700;font-size:1.25rem;color:inherit;text-decoration:none}
+    .main-nav{display:flex;gap:.6rem;align-items:center}
+    .main-nav a, .main-nav button{color:inherit;background:transparent;border:1px solid rgba(255,255,255,0.06);padding:.45rem .7rem;border-radius:8px;cursor:pointer;text-decoration:none;font-weight:600}
+    .main-nav .cta-primary{background:linear-gradient(90deg,var(--accent-1),var(--accent-2));color:#fff;border:none}
+
+    /* hero/about */
+    .hero{display:grid;grid-template-columns:1fr 360px;gap:2rem;align-items:start;padding:3rem 0}
+    .hero-left{padding:1.2rem 1.4rem;border-radius:12px;background:linear-gradient(180deg, rgba(0,0,0,0.18), rgba(0,0,0,0.06));box-shadow:0 8px 30px rgba(0,0,0,.6)}
+    .hero-left h1{margin:0 0 .6rem 0;font-size:2.1rem;line-height:1.05}
+    .hero-left p{margin:0 0 1rem 0;color:var(--muted);line-height:1.5}
+    .badges{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:1rem}
+    .badge{background:var(--card-bg);padding:.45rem .6rem;border-radius:8px;border:1px solid rgba(255,255,255,0.04);font-weight:600;color:#fff;font-size:.9rem}
+
+    /* mission / stats */
+    .mission{display:flex;gap:1rem;margin-top:1.1rem}
+    .mission p{flex:1;color:var(--muted);margin:0}
+    .stats{display:flex;gap:1rem;margin-top:1rem}
+    .stat{background:var(--card-bg);padding:0.8rem;border-radius:10px;border:1px solid rgba(255,255,255,0.04);text-align:center;min-width:92px}
+    .stat strong{display:block;font-size:1.2rem}
+
+    /* team */
+    .team{margin-top:1.5rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem}
+    .member{background:var(--card-bg);padding:0.9rem;border-radius:10px;border:1px solid rgba(255,255,255,0.04)}
+    .member h4{margin:0 0 0.25rem 0}
+    .member p{margin:0;color:var(--muted);font-size:.95rem}
+
+    /* aside right */
+    aside .card{background:var(--card-bg);border:1px solid rgba(255,255,255,0.04);padding:1rem;border-radius:10px}
+    .quick-links a{display:block;color:var(--muted);text-decoration:none;padding:.25rem 0}
+
+    footer{margin:2rem 0 3rem 0;color:#9aa;font-size:.9rem;text-align:center}
+
+    /* small shared modals */
+    #cart-modal,#history-modal,#payment-modal{display:none;position:fixed;right:1rem;top:4rem;background:rgba(0,0,0,.85);color:#fff;padding:1rem;border-radius:8px;z-index:5000;min-width:320px}
+    #audio-toggle{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:.45rem .6rem;border-radius:8px;cursor:pointer}
+    #audio-toggle[aria-pressed="true"]{background:linear-gradient(90deg,#9d4edd,#f72585);box-shadow:0 2px 8px #0004}
+
+    /* responsive */
+    @media (max-width:920px){
+      .hero{grid-template-columns:1fr;padding:2rem 0}
+      aside{order:2}
+    }
+    @media (max-width:480px){
+      .main-nav{display:none}
+      .hero-left h1{font-size:1.6rem}
+    }
+  </style>
 </head>
 <body>
-    <div class="auth-container">
-        <div class="auth-tabs">
-            <a href="{{ url_for('login') }}"><button class="auth-tab">Login</button></a>
-            <button class="auth-tab active">Sign Up</button>
+  <div class="spline-background" aria-hidden="true">
+    <video id="bg-video" autoplay loop muted playsinline>
+      <source src="{{ url_for('static', filename='about.mp4') }}" type="video/mp4">
+      <!-- browser fallback -->
+    </video>
+  </div>
+  <div class="bg-overlay" aria-hidden="true"></div>
+
+  <div class="main-container">
+    <header class="main-header" role="banner">
+      <a class="logo-text" href="{{ url_for('home') }}">Arcade & Archives</a>
+      <nav class="main-nav" role="navigation" aria-label="Main">
+        <a href="{{ url_for('books') }}">Books</a>
+        <a href="{{ url_for('video_games') }}">Video Games</a>
+        <a href="{{ url_for('cafe') }}">Cafe</a>
+        <button id="history-btn" title="Purchase history">History</button>
+        <button id="header-view-cart" title="View cart">Cart (<span id="header-cart-count">0</span>)</button>
+        <button id="audio-toggle" aria-pressed="false" title="Toggle sound">🔈</button>
+      </nav>
+    </header>
+
+    <main class="hero" role="main" aria-labelledby="about-title">
+      <section class="hero-left" aria-describedby="about-desc">
+        <h1 id="about-title">About Arcade & Archives</h1>
+        <p id="about-desc">We bring together curated books, retro & indie games, and a welcoming cafe. Our goal is to provide a place where stories and play converge — discover, play, and savor.</p>
+
+        <div class="badges">
+          <span class="badge">Curated Books</span>
+          <span class="badge">Retro & Indie Games</span>
+          <span class="badge">Cafe Events</span>
         </div>
-        <h2 style="margin-bottom:1rem;">Sign Up</h2>
-        {% with messages = get_flashed_messages() %}
-          {% if messages %}
-            <div class="flash">{{ messages[0] }}</div>
-          {% endif %}
-        {% endwith %}
-        <form method="post">
-            <input type="text" name="username" placeholder="Username" required>
-            <input type="password" name="password" placeholder="Password" required>
-            <button type="submit">Sign Up</button>
-        </form>
-        <p style="margin-top:1rem;">Already have an account? <a href="{{ url_for('login') }}">Login</a></p>
-    </div>
+
+        <div class="mission" role="region" aria-label="Our mission">
+          <p><strong>Our mission</strong><br><span class="muted" style="color:var(--muted)">Create an inclusive space for discovery — preserving classics and celebrating creators.</span></p>
+          <p><strong>What we do</strong><br><span class="muted" style="color:var(--muted)">Buy or rent games, find unique books, and enjoy seasonal cafe blends and events.</span></p>
+        </div>
+
+        <div class="stats" aria-hidden="true">
+          <div class="stat"><strong>1.2k</strong><span style="color:var(--muted)">Members</span></div>
+          <div class="stat"><strong>500+</strong><span style="color:var(--muted)">Games</span></div>
+          <div class="stat"><strong>3</strong><span style="color:var(--muted)">Weekly events</span></div>
+        </div>
+
+        <div class="team" aria-label="Team">
+          <div class="member">
+           
+          <!-- four additional team places -->
+          <div class="member">
+            <h4>Stash Lopes</h4>
+            <p>RollNo:-66</p>
+          </div>
+          <div class="member">
+            <h4>Sanika</h4>
+            <p>RollNo:-</p>
+          </div>
+          <div class="member">
+            <h4>Yashvie</h4>
+            <p>RollNo:-</p>
+          </div>
+          <div class="member">
+            <h4>Shravani</h4>
+            <p>RollNo:-</p>
+          </div>
+        </div>
+      </section>
+
+      <aside aria-label="Quick actions">
+        <div class="card">
+          <strong>Quick Links</strong>
+          <div class="quick-links" style="margin-top:.6rem">
+            <a href="{{ url_for('video_games') }}">Browse Games</a>
+            <a href="{{ url_for('books') }}">Explore Books</a>
+            <a href="{{ url_for('cafe') }}">Cafe & Events</a>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:1rem">
+          <strong>Stay in touch</strong>
+          <p style="color:var(--muted);margin:.6rem 0 0 0">Sign up for updates and event invites — demo site only.</p>
+          <div style="display:flex;gap:.5rem;margin-top:.75rem">
+            <input type="email" placeholder="you@example.com" style="flex:1;padding:.45rem;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit">
+            <button class="cta-primary" style="padding:.45rem .6rem;border-radius:8px;border:none;cursor:pointer">Join</button>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <footer>
+      © {{ current_year if current_year is defined else '' }} Arcade and Archives — Demo site. For production, integrate a secure payment gateway and server-side persistence.
+    </footer>
+  </div>
+
+  <!-- small shared modals (placeholders) -->
+  <div id="cart-modal" role="dialog" aria-hidden="true">
+    <strong>Cart</strong><ul id="cart-items"></ul>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.5rem;"><button id="checkout">Checkout</button><button id="close-cart">Close</button></div>
+  </div>
+
+  <div id="history-modal" role="dialog" aria-hidden="true">
+    <strong>Purchase History</strong><ul id="history-items"></ul>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.5rem;"><button id="clear-history">Clear</button><button id="close-history">Close</button></div>
+  </div>
+
+  <div id="payment-modal" role="dialog" aria-hidden="true" aria-labelledby="payment-title"></div>
+
+  <script>
+    // background media control (about.mp4 as video + audio)
+    const bgVideo = document.getElementById('bg-video');
+    // separate audio track optional — use same file if silent track isn't available
+    let bgAudio;
+    try {
+      bgAudio = new Audio('{{ url_for("static", filename="about.mp4") }}');
+      bgAudio.loop = true;
+    } catch (e) {
+      bgAudio = null;
+    }
+
+    const audioToggle = document.getElementById('audio-toggle');
+
+    if (bgVideo) {
+      bgVideo.addEventListener('loadeddata', () => { bgVideo.play().catch(()=>{}); });
+    }
+
+    async function tryPlayAudio() {
+      if (!bgAudio || !audioToggle) return;
+      try {
+        await bgAudio.play();
+        audioToggle.textContent = '🔊';
+        audioToggle.setAttribute('aria-pressed','true');
+      } catch (err) {
+        audioToggle.textContent = '🔈';
+        audioToggle.setAttribute('aria-pressed','false');
+      }
+    }
+
+    audioToggle?.addEventListener('click', async () => {
+      if (!bgAudio) return;
+      if (audioToggle.getAttribute('aria-pressed') === 'true') {
+        audioToggle.setAttribute('aria-pressed','false');
+        audioToggle.textContent = '🔈';
+        bgAudio.pause();
+      } else {
+        await tryPlayAudio();
+      }
+    });
+
+    // attempt to start audio on first user interaction (browsers often block autoplay with audio)
+    window.addEventListener('pointerdown', function once() {
+      tryPlayAudio();
+      window.removeEventListener('pointerdown', once);
+    });
+
+    // expose minimal hooks for shared cart/history scripts
+    window.App = window.App || {};
+    App.updateHeaderCart = (n) => { const el = document.getElementById('header-cart-count'); if (el) el.textContent = n; };
+    App.openCart = () => { document.getElementById('cart-modal').style.display='block'; };
+  </script>
 </body>
-</html> 
+</html>
