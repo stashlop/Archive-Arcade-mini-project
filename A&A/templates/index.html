@@ -77,9 +77,21 @@
       .hero{grid-template-columns:1fr;padding:2rem 0}
       aside{order:2}
     }
-    @media (max-width:480px){
-      .main-nav{display:none}
-      .hero-left h1{font-size:1.6rem}
+    @media (max-width:600px){
+      .main-nav{display:none} /* hide full nav on small screens, optionally add a mobile menu */
+      .hero{padding:1.4rem 0}
+      .hero-left h1{font-size:1.5rem}
+      .hero-right{display:none} /* hide the right column to simplify mobile UI */
+      .card, .member, .stat { padding:.8rem }
+      .quick-links a{display:block;padding:.5rem 0}
+      /* stack join CTA full width */
+      .cta a, .cta .btn-primary { display:block;width:100%;text-align:center }
+      /* hide background video on small screens to save bandwidth */
+      .spline-background video, .spline-background canvas { display:none !important; }
+    }
+    @media (hover: none) and (pointer: coarse) {
+      /* touch-friendly */
+      .main-nav a, .main-nav button { min-height:44px; padding:.6rem .75rem; }
     }
   </style>
 </head>

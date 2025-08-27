@@ -1,36 +1,57 @@
 <!doctype html>
 <html lang="en">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Sign up</title>
-    <style>
-      body{font-family:sans-serif;background:#071019;color:#fff;padding:2rem}
-      .card{max-width:420px;margin:2rem auto;padding:1rem;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.04)}
-      input{width:100%;padding:.6rem;margin:.45rem 0;border-radius:6px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit}
-      button{padding:.6rem 0.9rem;border-radius:6px;border:none;background:linear-gradient(90deg,#16a085,#30c7ec);color:#fff;cursor:pointer}
-      .muted{color:#cfcfcf;font-size:.95rem}
-    </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sign up — Arcade and Archives</title>
+  <style>
+    :root{--bg:#071019;--card:rgba(255,255,255,0.03);--muted:#cfcfcf}
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial;color:#fff;background:var(--bg)}
+    .wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1.25rem}
+    .auth-card{width:100%;max-width:480px;background:var(--card);border:1px solid rgba(255,255,255,0.04);padding:1.25rem;border-radius:12px;z-index:3;position:relative;box-shadow:0 12px 40px rgba(0,0,0,0.6)}
+    h2{margin:0 0 .6rem 0}
+    label{display:block;font-size:.95rem;margin-top:.6rem}
+    input{width:100%;padding:.6rem;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit;margin-top:.35rem}
+    .actions{display:flex;gap:.5rem;align-items:center;justify-content:space-between;margin-top:1rem}
+    button{background:linear-gradient(90deg,#16a085,#30c7ec);color:#fff;border:none;padding:.6rem .9rem;border-radius:8px;cursor:pointer}
+    .muted{color:var(--muted);font-size:.95rem}
+    .flash{background:rgba(0,0,0,0.3);padding:.6rem;border-radius:8px;margin-top:.6rem;color:var(--muted)}
+    a{color:var(--muted);text-decoration:none}
+    @media (max-width:420px){ .auth-card{padding:1rem} button{width:48%} .actions{flex-direction:column;gap:.6rem} }
+  </style>
 </head>
 <body>
-  <div class="card">
-    <h2>Create account</h2>
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        <div class="muted">
-        {% for cat,msg in messages %}
-          <div>{{ msg }}</div>
-        {% endfor %}
-        </div>
-      {% endif %}
-    {% endwith %}
-    <form method="post" action="{{ url_for('signup') }}">
-      <label>Username<input name="username" required></label>
-      <label>Email<input name="email" type="email" required></label>
-      <label>Password<input name="password" type="password" required></label>
-      <div style="display:flex;gap:.5rem;justify-content:space-between;align-items:center;margin-top:.6rem">
+  <div class="wrap">
+    <form class="auth-card" method="post" action="{{ url_for('signup') }}">
+      <h2>Create account</h2>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="flash">
+            {% for cat,msg in messages %}<div>{{ msg }}</div>{% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+
+      <label>Username
+        <input name="username" required autocomplete="username" />
+      </label>
+
+      <label>Email
+        <input name="email" type="email" required autocomplete="email" />
+      </label>
+
+      <label>Password
+        <input name="password" type="password" required autocomplete="new-password" />
+      </label>
+
+      <div class="actions">
         <button type="submit">Sign up</button>
-        <a href="{{ url_for('login') }}" style="color:#cfcfcf;text-decoration:none">Already have an account?</a>
+        <div style="text-align:right">
+          <div class="muted">Already have an account?</div>
+          <a href="{{ url_for('login') }}">Sign in</a>
+        </div>
       </div>
     </form>
   </div>

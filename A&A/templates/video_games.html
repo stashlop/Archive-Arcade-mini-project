@@ -5,15 +5,45 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Video Games - Arcade and Archives</title>
     <style>
-        body { margin: 0; font-family: sans-serif; color: white; }
+        body { margin: 0; font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; color: #fff; background: #071019; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
         /* search & categories */
         .store-controls { display:flex; gap:1rem; align-items:center; justify-content:space-between; margin-bottom:0.75rem; flex-wrap:wrap; }
-        .search-bar { display:flex; gap:.5rem; align-items:center; flex:1; max-width:640px; }
-        .search-input { flex:1; padding:.5rem .7rem; border-radius:8px; border:1px solid rgba(255,255,255,0.06); background:rgba(0,0,0,0.25); color:inherit; }
-        .categories { display:flex; gap:.5rem; align-items:center; overflow:auto; padding:0.25rem 0; }
-        .category-btn { padding:.4rem .6rem; border-radius:999px; border:1px solid rgba(255,255,255,0.06); background:transparent; color:inherit; font-size:.9rem; cursor:pointer; white-space:nowrap; }
+        .search-bar { display:flex; gap:.5rem; align-items:center; flex:1; max-width:640px; min-width:0; }
+        .search-input { flex:1; padding:.75rem 1rem; border-radius:10px; border:1px solid rgba(255,255,255,0.06); background:rgba(0,0,0,0.28); color:inherit; font-size:1rem; }
+        .categories { display:flex; gap:.5rem; align-items:center; overflow:auto; padding:0.25rem 0; -webkit-overflow-scrolling:touch; }
+        .category-btn { padding:.45rem .7rem; border-radius:999px; border:1px solid rgba(255,255,255,0.06); background:transparent; color:inherit; font-size:.95rem; cursor:pointer; white-space:nowrap; }
         .category-btn.active { background:linear-gradient(90deg,#16a085,#30c7ec); color:#fff; border:none; }
-        .results-meta { color:#cfcfcf; font-size:.95rem; margin-left:1rem; min-width:120px; text-align:right; }
+        .games-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap:1rem; align-items:start; }
+        .game-card { background: rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.04); padding:1rem; border-radius:10px; display:flex; flex-direction:column; gap:.5rem; }
+        .game-card img { width:100%; height:140px; object-fit:cover; border-radius:8px; }
+        .game-desc { color:#cfcfcf; font-size:.95rem; margin:0; flex:1; }
+        .game-actions { display:flex; gap:.5rem; justify-content:center; margin-top:.5rem; }
+        .game-actions button { padding:.6rem .8rem; border-radius:8px; cursor:pointer; border:none; font-weight:700; }
+        .buy-btn { background:linear-gradient(90deg,#16a085,#30c7ec); color:#fff; }
+        .rent-btn { background:transparent; border:1px solid rgba(255,255,255,0.06); color:inherit; }
+
+        /* responsive / mobile adjustments */
+        @media (max-width: 920px) {
+            .games-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+            .store-controls { gap:.6rem; }
+            .search-input { font-size:0.98rem; padding:.6rem .9rem; }
+        }
+        @media (max-width: 600px) {
+            /* single column cards for small phones */
+            .games-grid { grid-template-columns: 1fr; }
+            .game-card { padding:1rem; }
+            .game-card img { height:180px; }
+            .game-actions { flex-direction:row; gap:.5rem; }
+            .game-actions button { flex:1; padding:.9rem; font-size:1rem; }
+            .search-bar { width:100%; }
+            .categories { width:100%; overflow-x:auto; gap:.4rem; padding:.2rem 0; }
+            /* reduce heavy visuals */
+            .spline-background video, .spline-background canvas { display:none !important; }
+        }
+        @media (hover: none) and (pointer: coarse) {
+            /* larger touch targets on touch devices */
+            .category-btn, .game-actions button { min-height:44px; }
+        }
 
         body { margin: 0; font-family: sans-serif; color: white; }
         .spline-background { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -2; overflow: hidden; }
@@ -308,33 +338,35 @@
         const closeHistoryBtn = document.getElementById('close-history');
         const clearHistoryBtn = document.getElementById('clear-history');
 
-        function getPurchaseHistory() {
-            try {
-                return JSON.parse(localStorage.getItem('purchaseHistory') || '[]');
-            } catch (_) { return []; }
+        function fetchPurchaseHistory() {
+            fetch('/api/purchase/history')
+                .then(response => {
+                    if (!response.ok) throw new Error('Failed to fetch history');
+                    return response.json();
+                })
+                .then(history => {
+                    renderHistoryUI(history);
+                })
+                .catch(error => {
+                    console.error('History error:', error);
+                    renderHistoryUI([]);
+                });
         }
-        function savePurchaseHistory(list) {
-            localStorage.setItem('purchaseHistory', JSON.stringify(list || []));
-        }
-        function addToPurchaseHistory(purchase) {
-            const list = getPurchaseHistory();
-            list.unshift(purchase); // newest first
-            savePurchaseHistory(list);
-            renderHistoryUI();
-        }
-        function renderHistoryUI() {
-            const list = getPurchaseHistory();
+
+        function renderHistoryUI(history = []) {
             historyItemsEl.innerHTML = '';
-            if (list.length === 0) {
+            if (!history || history.length === 0) {
                 const li = document.createElement('li');
                 li.textContent = 'No purchases yet.';
                 historyItemsEl.appendChild(li);
                 return;
             }
-            list.forEach(p => {
+            
+            history.forEach(p => {
                 const li = document.createElement('li');
                 const date = new Date(p.date).toLocaleString();
                 li.innerHTML = `<strong>${p.items.length} item(s)</strong> — $${p.total} — ${date}<br><small style="color:#cfcfcf;">${p.buyer?.name || ''} ${p.buyer?.email ? '— ' + p.buyer.email : ''}</small>`;
+                
                 const details = document.createElement('ul');
                 details.style.margin = '0.4rem 0 0.6rem 0.6rem';
                 details.style.padding = '0';
@@ -347,6 +379,28 @@
                 });
                 li.appendChild(details);
                 historyItemsEl.appendChild(li);
+            });
+        }
+
+        // Update the history button click handler
+        if (historyBtn) {
+            historyBtn.addEventListener('click', () => {
+                fetchPurchaseHistory();
+                historyModal.style.display = 'block';
+                historyModal.setAttribute('aria-hidden','false');
+            });
+        }
+        if (closeHistoryBtn) {
+            closeHistoryBtn.addEventListener('click', () => {
+                historyModal.style.display = 'none';
+                historyModal.setAttribute('aria-hidden','true');
+            });
+        }
+        if (clearHistoryBtn) {
+            clearHistoryBtn.addEventListener('click', () => {
+                if (!confirm('Clear all purchase history?')) return;
+                // Call API to clear history (optional)
+                fetchPurchaseHistory(); // Refresh the list
             });
         }
 
@@ -483,9 +537,8 @@
                 return;
             }
 
-            // prepare purchase snapshot for history (use before clearing cart)
+            // prepare purchase snapshot for history
             const purchaseSnapshot = {
-                id: Date.now(),
                 items: cart.map(i => ({ ...i })),
                 total: cartTotal(),
                 buyer: { name, email },
@@ -496,14 +549,27 @@
                 // demo flow: no real charge
                 paymentMessage.textContent = 'Processing demo payment...';
                 paymentForm.classList.add('processing');
-                setTimeout(() => {
+                
+                // Save purchase to database
+                fetch('/api/purchase', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(purchaseSnapshot)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) throw new Error(data.error);
+                    
                     paymentMessage.textContent = 'Demo payment successful. Thank you!';
-                    addToPurchaseHistory(purchaseSnapshot);
                     cart.length = 0;
                     updateCartUI();
                     paymentForm.classList.remove('processing');
                     setTimeout(() => { closePaymentModal(); cartModal.style.display = 'none'; }, 900);
-                }, 1000);
+                })
+                .catch(error => {
+                    paymentMessage.textContent = `Payment error: ${error.message}`;
+                    paymentForm.classList.remove('processing');
+                });
                 return;
             }
 
@@ -531,12 +597,26 @@
             setTimeout(() => {
                 // accept demo test card 4242... or randomly succeed
                 if (card.startsWith('4242') || Math.random() > 0.1) {
-                    paymentMessage.textContent = 'Payment successful. Thank you!';
-                    addToPurchaseHistory(purchaseSnapshot);
-                    cart.length = 0;
-                    updateCartUI();
-                    paymentForm.classList.remove('processing');
-                    setTimeout(() => { closePaymentModal(); cartModal.style.display = 'none'; }, 900);
+                    // Save purchase to database
+                    fetch('/api/purchase', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(purchaseSnapshot)
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.error) throw new Error(data.error);
+                        
+                        paymentMessage.textContent = 'Payment successful. Thank you!';
+                        cart.length = 0;
+                        updateCartUI();
+                        paymentForm.classList.remove('processing');
+                        setTimeout(() => { closePaymentModal(); cartModal.style.display = 'none'; }, 900);
+                    })
+                    .catch(error => {
+                        paymentMessage.textContent = `Payment error: ${error.message}`;
+                        paymentForm.classList.remove('processing');
+                    });
                 } else {
                     paymentMessage.textContent = 'Payment failed. Try another card or choose Demo.';
                     paymentForm.classList.remove('processing');
@@ -624,28 +704,6 @@
             document.querySelectorAll('[data-requires-auth]').forEach(b => {
                 b.style.opacity = '0.7';
                 b.title = 'Sign in required';
-            });
-        }
-
-        // history modal handlers
-        if (historyBtn) {
-            historyBtn.addEventListener('click', () => {
-                renderHistoryUI();
-                historyModal.style.display = 'block';
-                historyModal.setAttribute('aria-hidden','false');
-            });
-        }
-        if (closeHistoryBtn) {
-            closeHistoryBtn.addEventListener('click', () => {
-                historyModal.style.display = 'none';
-                historyModal.setAttribute('aria-hidden','true');
-            });
-        }
-        if (clearHistoryBtn) {
-            clearHistoryBtn.addEventListener('click', () => {
-                if (!confirm('Clear all purchase history?')) return;
-                savePurchaseHistory([]);
-                renderHistoryUI();
             });
         }
 

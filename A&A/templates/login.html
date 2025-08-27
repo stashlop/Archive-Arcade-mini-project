@@ -1,37 +1,60 @@
 <!doctype html>
 <html lang="en">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Login</title>
-    <style>
-      body{font-family:sans-serif;background:#071019;color:#fff;padding:2rem}
-      .card{max-width:420px;margin:2rem auto;padding:1rem;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.04)}
-      input{width:100%;padding:.6rem;margin:.45rem 0;border-radius:6px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit}
-      button{padding:.6rem 0.9rem;border-radius:6px;border:none;background:linear-gradient(90deg,#16a085,#30c7ec);color:#fff;cursor:pointer}
-      .muted{color:#cfcfcf;font-size:.95rem}
-    </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Login — Arcade and Archives</title>
+  <style>
+    :root{--bg:#071019;--card:rgba(255,255,255,0.03);--muted:#cfcfcf}
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial;color:#fff;background:var(--bg)}
+    .wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1.25rem}
+    .auth-card{width:100%;max-width:420px;background:var(--card);border:1px solid rgba(255,255,255,0.04);padding:1.5rem;border-radius:12px;z-index:10;position:relative;box-shadow:0 12px 40px rgba(0,0,0,0.6)}
+    h2{margin:0 0 1rem 0}
+    label{display:block;font-size:.95rem;margin-top:1rem}
+    input{width:100%;padding:.7rem;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.2);color:inherit;margin-top:.35rem;font-size:1rem}
+    .actions{display:flex;gap:1rem;align-items:center;justify-content:space-between;margin-top:1.5rem}
+    button{background:linear-gradient(90deg,#16a085,#30c7ec);color:#fff;border:none;padding:.7rem 1.2rem;border-radius:8px;cursor:pointer;font-size:1rem;font-weight:600}
+    .muted{color:var(--muted);font-size:.9rem}
+    .flash{background:rgba(0,0,0,0.3);padding:.7rem;border-radius:8px;margin:.7rem 0;color:var(--muted)}
+    a{color:#30c7ec;text-decoration:none}
+    a:hover{text-decoration:underline}
+    @media (max-width:480px){.auth-card{padding:1.2rem} .actions{flex-direction:column;align-items:stretch} button{width:100%}}
+  </style>
 </head>
 <body>
-  <div class="card">
-    <h2>Sign in</h2>
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        <div class="muted">
-        {% for cat,msg in messages %}
-          <div>{{ msg }}</div>
-        {% endfor %}
+  <div class="wrap">
+    <div class="auth-card">
+      <h2>Sign in</h2>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="flash">
+            {% for category, message in messages %}
+              <div>{{ message }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+
+      <form method="post" action="{{ url_for('login') }}">
+        <input type="hidden" name="next" value="{{ request.args.get('next','') }}">
+        
+        <label for="ident">Username or Email</label>
+        <input id="ident" name="ident" required autocomplete="username">
+        
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" required autocomplete="current-password">
+        
+        <div class="actions">
+          <button type="submit">Sign in</button>
+          <div class="links">
+            <a href="{{ url_for('signup') }}">Create account</a>
+          </div>
         </div>
-      {% endif %}
-    {% endwith %}
-    <form method="post" action="{{ url_for('login') }}">
-      <label>Username or Email<input name="ident" required></label>
-      <label>Password<input name="password" type="password" required></label>
-      <div style="display:flex;gap:.5rem;justify-content:space-between;align-items:center;margin-top:.6rem">
-        <button type="submit">Login</button>
-        <a href="{{ url_for('signup') }}" style="color:#cfcfcf;text-decoration:none">Create account</a>
-      </div>
-    </form>
+      </form>
+    </div>
   </div>
 </body>
 </html>
+

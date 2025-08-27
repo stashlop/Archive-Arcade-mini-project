@@ -1,7 +1,7 @@
-from flask import Blueprint, current_app, jsonify, request
-import sqlite3
-import os
+import sqlite3, os, json
+from flask import Blueprint, current_app, jsonify, request, session
 from pathlib import Path
+from datetime import datetime
 
 games_bp = Blueprint('games_api', __name__)
 
@@ -9,6 +9,21 @@ def get_db_path():
     inst = current_app.instance_path if hasattr(current_app, 'instance_path') else 'instance'
     Path(inst).mkdir(parents=True, exist_ok=True)
     return os.path.join(inst, 'games.db')
+
+def init_purchase_history_db(conn):
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS purchase_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            purchase_date TEXT NOT NULL,
+            total_amount REAL NOT NULL,
+            buyer_name TEXT,
+            buyer_email TEXT,
+            items_json TEXT NOT NULL
+        )
+    """)
+    conn.commit()
 
 def init_db(conn):
     cur = conn.cursor()
@@ -24,6 +39,8 @@ def init_db(conn):
         )
     """)
     conn.commit()
+    # Also initialize purchase history table
+    init_purchase_history_db(conn)
 
 def row_to_game(r):
     return {
@@ -72,3 +89,90 @@ def seed_games():
     conn.commit()
     conn.close()
     return jsonify({"ok": True, "seeded": len(sample)}), 201
+
+@games_bp.route('/api/purchase', methods=['POST'])
+def save_purchase():
+    """Save a purchase to the database"""
+    if not session.get('user_id'):
+        return jsonify({"error": "Authentication required"}), 401
+    
+    try:
+        data = request.json
+        if not data or 'items' not in data or not data['items']:
+            return jsonify({"error": "Invalid purchase data"}), 400
+            
+        user_id = session.get('user_id')
+        purchase_date = data.get('date') or datetime.utcnow().isoformat()
+        total_amount = float(data.get('total', 0))
+        buyer_name = data.get('buyer', {}).get('name', '')
+        buyer_email = data.get('buyer', {}).get('email', '')
+        items_json = json.dumps(data.get('items', []))
+        
+        dbp = get_db_path()
+        conn = sqlite3.connect(dbp)
+        conn.row_factory = sqlite3.Row
+        
+        # Ensure both tables exist
+        init_db(conn)
+        
+        cur = conn.cursor()
+        cur.execute(
+            """INSERT INTO purchase_history 
+               (user_id, purchase_date, total_amount, buyer_name, buyer_email, items_json) 
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (user_id, purchase_date, total_amount, buyer_name, buyer_email, items_json)
+        )
+        conn.commit()
+        purchase_id = cur.lastrowid
+        conn.close()
+        
+        return jsonify({"success": True, "purchase_id": purchase_id}), 201
+        
+    except Exception as e:
+        current_app.logger.error(f"Purchase error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@games_bp.route('/api/purchase/history', methods=['GET'])
+def get_purchase_history():
+    """Get purchase history for the current user"""
+    if not session.get('user_id'):
+        return jsonify({"error": "Authentication required"}), 401
+    
+    try:
+        user_id = session.get('user_id')
+        dbp = get_db_path()
+        conn = sqlite3.connect(dbp)
+        conn.row_factory = sqlite3.Row
+        
+        # Ensure both tables exist
+        init_db(conn)
+        
+        cur = conn.cursor()
+        cur.execute(
+            """SELECT * FROM purchase_history 
+               WHERE user_id = ? 
+               ORDER BY purchase_date DESC""",
+            (user_id,)
+        )
+        rows = cur.fetchall()
+        
+        history = []
+        for row in rows:
+            items = json.loads(row['items_json'])
+            history.append({
+                "id": row['id'],
+                "date": row['purchase_date'],
+                "total": row['total_amount'],
+                "buyer": {
+                    "name": row['buyer_name'],
+                    "email": row['buyer_email']
+                },
+                "items": items
+            })
+        
+        conn.close()
+        return jsonify(history)
+        
+    except Exception as e:
+        current_app.logger.error(f"Get history error: {str(e)}")
+        return jsonify({"error": str(e)}), 500

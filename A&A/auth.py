@@ -46,7 +46,7 @@ def init_app(app):
     with app.app_context():
         init_db()
 
-@auth_bp.route('/signup', methods=['GET','POST'])
+@auth_bp.route('/signup', methods=['GET','POST'], endpoint='signup')
 def signup():
     if request.method == 'GET':
         return render_template('signup.html')
@@ -55,7 +55,7 @@ def signup():
     password = request.form.get('password') or ''
     if not username or not email or not password:
         flash('Username, email and password are required.', 'error')
-        return redirect(url_for('auth.signup'))
+        return redirect(url_for('signup'))
     pw_hash = generate_password_hash(password)
     conn = get_conn(); cur = conn.cursor()
     try:
@@ -68,7 +68,7 @@ def signup():
         # simple uniqueness hint
         flash('User exists or invalid data. Use a different username/email.', 'error')
         conn.close()
-        return redirect(url_for('auth.signup'))
+        return redirect(url_for('signup'))
     conn.close()
     session.clear()
     session['user_id'] = uid
@@ -76,27 +76,43 @@ def signup():
     flash('Signup successful. You are logged in.', 'success')
     return redirect(url_for('home') if 'home' in current_app.view_functions else '/')
 
-@auth_bp.route('/login', methods=['GET','POST'])
+@auth_bp.route('/login', methods=['GET','POST'], endpoint='login')
 def login():
     if request.method == 'GET':
+        # If already logged in, go home
+        if session.get('user_id'):
+            return redirect(url_for('home') if 'home' in current_app.view_functions else '/')
         return render_template('login.html')
+
+    # POST handling
     ident = (request.form.get('ident') or '').strip()
     password = request.form.get('password') or ''
+    next_url = request.args.get('next') or request.form.get('next') or '/'
+    
+    # basic validation
     if not ident or not password:
-        flash('Provide username/email and password.', 'error')
-        return redirect(url_for('auth.login'))
+        flash('Please provide username/email and password.', 'error')
+        return redirect(url_for('login'))
+
     conn = get_conn(); cur = conn.cursor()
     cur.execute("SELECT * FROM users WHERE username = ? OR email = ? LIMIT 1", (ident, ident.lower()))
     row = cur.fetchone()
     conn.close()
+
     if not row or not check_password_hash(row['password_hash'], password):
         flash('Invalid credentials.', 'error')
-        return redirect(url_for('auth.login'))
+        return redirect(url_for('login'))
+
+    # Success - save user in session
     session.clear()
     session['user_id'] = row['id']
     session['username'] = row['username']
-    flash('Logged in.', 'success')
-    return redirect(url_for('home') if 'home' in current_app.view_functions else '/')
+    flash('Welcome back!', 'success')
+
+    # Use a simpler redirect approach to avoid potential errors
+    if next_url and next_url.startswith('/'):
+        return redirect(next_url)
+    return redirect('/')  # Simplified - always redirect to root
 
 @auth_bp.route('/logout')
 def logout():
@@ -110,6 +126,10 @@ def login_required(view):
     def wrapped(*args, **kwargs):
         if not session.get('user_id'):
             # preserve requested path in `next` so user can return after login
-            return redirect(url_for('auth.login', next=request.path))
+            return redirect(url_for('login', next=request.path))
         return view(*args, **kwargs)
     return wrapped
+
+@auth_bp.route('/user-status')
+def user_status():
+    return render_template('user_status.html')

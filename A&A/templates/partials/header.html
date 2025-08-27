@@ -1,0 +1,16 @@
+<header class="main-header">
+  <a class="logo-text" href="{{ url_for('index') }}">Arcade & Archives</a>
+  <nav class="main-nav">
+    <a href="{{ url_for('books') }}">Books</a>
+    <a href="{{ url_for('video_games') }}">Video Games</a>
+    <a href="{{ url_for('cafe') }}">Cafe</a>
+    
+    {% if session.get('user') %}
+      <span class="user-greeting">Hi, {{ session.get('username') or session.get('user') }}!</span>
+      <a href="{{ url_for('logout') }}">Sign Out</a>
+    {% else %}
+      <a href="{{ url_for('login') }}">Sign In</a>
+      <a href="{{ url_for('signup') }}">Sign Up</a>
+    {% endif %}
+  </nav>
+</header>
