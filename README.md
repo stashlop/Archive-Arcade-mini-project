@@ -7,6 +7,9 @@
 Archive & Arcade (A-A) is an engaging platform that combines retro gaming experiences with a digital archive system. It allows users to explore classic arcade-style games while also accessing a curated collection of digital content. The project aims to preserve digital history and provide interactive entertainment.
 
 🏛️ Features
+<img width="1909" height="905" alt="Screenshot 2025-09-27 210604" src="https://github.com/user-attachments/assets/c3a2722a-a98d-48a1-a321-8601664172c3" />
+
+<img width="1909" height="905" alt="Screenshot 2025-09-27 210649" src="https://github.com/user-attachments/assets/96ce48f2-3081-4684-beb3-478b05ac69c7" />
 
 🎮 Arcade Mode – Play classic-inspired retro games
 
