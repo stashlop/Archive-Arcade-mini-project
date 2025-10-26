@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Your Cart - A&A Store</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin:0; color:#fff; background: radial-gradient(1200px 600px at 20% -10%, #6b7cff55, #000000 60%); }
+    .header { position: sticky; top:0; z-index:10; background: rgba(255,255,255,0.08); backdrop-filter: blur(10px); padding: 1rem 2rem; border-bottom: 1px solid rgba(255,255,255,0.15); }
+    .nav { max-width: 1100px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; }
+    .logo { font-weight: 800; letter-spacing:0.5px; }
+    .nav a { color:#fff; text-decoration:none; margin-left:1rem; padding: .4rem .7rem; border-radius:8px; }
+    .nav a:hover { background: rgba(255,255,255,0.15); }
+    .container { max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { margin: 0 0 1rem; }
+    .card { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 16px; padding: 1rem; }
+    .items { display:grid; gap:1rem; }
+    .item { display:grid; grid-template-columns: 1fr auto auto auto; gap: 1rem; align-items:center; padding: .8rem; border-radius: 12px; background: rgba(0,0,0,0.2); }
+    .title { font-weight:600; }
+    .pill { font-size:.8rem; padding:.2rem .5rem; border-radius:999px; background: rgba(255,255,255,0.15); }
+    .price { font-variant-numeric: tabular-nums; }
+    .summary { display:flex; align-items:center; justify-content: space-between; margin-top:1rem; padding-top:1rem; border-top:1px dashed rgba(255,255,255,0.2); }
+    .actions { display:flex; gap:.5rem; }
+    button { cursor:pointer; border:none; border-radius:10px; padding:.6rem .9rem; color:#fff; }
+    .btn-danger { background:#ef4444; }
+    .btn-secondary { background:#475569; }
+    .btn-primary { background:#3b82f6; }
+    .empty { text-align:center; padding:2rem; opacity:.9; }
+    @media (max-width: 700px) {
+      .item { grid-template-columns: 1fr auto; }
+      .qty, .price { justify-self: end; }
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <nav class="nav">
+      <div class="logo">A&A Store</div>
+      <div>
+        <a href="{{ url_for('index') }}">Home</a>
+        <a href="{{ url_for('books') }}">Books</a>
+        <a href="{{ url_for('video_games') }}">Video Games</a>
+        <a href="{{ url_for('cafe') }}">Cafe</a>
+        <a href="{{ url_for('logout') }}">Logout</a>
+      </div>
+    </nav>
+  </header>
+
+  <main class="container">
+    <h1>Your Cart</h1>
+    <div class="card">
+      {% if items %}
+      <div class="items" id="cartItems">
+        {% for it in items %}
+          <div class="item" data-key="{{ it.key }}">
+            <div class="title">
+              {{ it.title }} <span class="pill">{{ it.item_type|capitalize }} • {{ 'Buy' if it.action=='buy' else 'Rent' }}</span>
+            </div>
+            <div class="qty">x{{ it.quantity }}</div>
+            <div class="price">${{ '%.2f'|format(it.unit_price * it.quantity) }}</div>
+            <div class="actions">
+              <button class="btn-danger" onclick="removeItem('{{ it.key }}')">Remove</button>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+
+      <div class="summary">
+        <div><strong>Subtotal:</strong> $<span id="subtotal">{{ '%.2f'|format(subtotal) }}</span></div>
+        <div>
+          <button class="btn-secondary" onclick="clearCart()">Clear Cart</button>
+          <button class="btn-primary" onclick="checkout()">Checkout</button>
+        </div>
+      </div>
+      {% else %}
+      <div class="empty">Your cart is empty.</div>
+      {% endif %}
+    </div>
+  </main>
+
+  <script>
+    function refreshBadge(count) {
+      const nodes = document.querySelectorAll('[data-cart-count]');
+      nodes.forEach(n => n.textContent = count);
+    }
+    function removeItem(key) {
+      fetch('/api/cart/remove', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ key })})
+        .then(r => r.json())
+        .then(d => {
+          if (!d.success) return alert(d.error || 'Failed');
+          const row = document.querySelector(`.item[data-key="${key}"]`);
+          if (row) row.remove();
+          document.getElementById('subtotal').textContent = d.subtotal.toFixed(2);
+          refreshBadge(d.count);
+          if (!document.querySelector('.item')) location.reload();
+        })
+        .catch(() => alert('Error'));
+    }
+    function clearCart() {
+      if (!confirm('Clear all items from cart?')) return;
+      fetch('/api/cart/clear', { method:'POST' })
+        .then(r => r.json())
+        .then(d => {
+          if (d.success) location.reload();
+        });
+    }
+    function checkout() {
+      fetch('/api/cart/checkout', { method:'POST' })
+        .then(r => r.json())
+        .then(d => {
+          if (d.success) { alert(d.message || 'Checkout complete'); location.reload(); }
+          else alert(d.error || 'Checkout failed');
+        });
+    }
+  </script>
+</body>
+</html>

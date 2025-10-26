@@ -3,127 +3,641 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Books - Arcade and Archives</title>
+    <title>Books Library - A&A Store</title>
     <style>
-        body { margin: 0; font-family: sans-serif; color: white; }
-        .spline-background { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; overflow: hidden; }
-        #bg-video { width: 100%; height: 100%; object-fit: cover; display: block; }
-        .main-header, .hero-section { position: relative; z-index: 1; }
-        .main-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 2rem; }
-        .logo-link { display: flex; align-items: center; text-decoration: none; color: inherit; }
-        .logo-text { font-size: 1.5rem; font-weight: bold; }
-        .main-nav a { margin-left: 1.5rem; text-decoration: none; color: inherit; font-weight:600; }
-        .hero-section { display: flex; justify-content: center; align-items: center; height: 80vh; }
-        .hero-content { text-align: center; max-width: 900px; padding: 1rem; }
-        .hero-text h1 { font-size: 3rem; margin-bottom: 1rem; }
-        .hero-text p { font-size: 1.2rem; margin-bottom: 2rem; color: #e6e6e6; }
-        .hero-btn { padding: 1rem 2rem; margin: 0 0.5rem; text-decoration: none; color: white; border: 1px solid rgba(255,255,255,0.25); border-radius: 5px; background: rgba(0,0,0,0.25); }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-        /* audio toggle button */
-        #audio-toggle {
-            background: rgba(0,0,0,0.45);
-            color: #fff;
-            border: 1px solid rgba(255,255,255,0.12);
-            padding: 0.4rem 0.6rem;
-            border-radius: 6px;
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            color: #333;
+            overflow-x: hidden;
+        }
+
+        /* Background Video Styles */
+        .video-background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            overflow: hidden;
+        }
+
+        .video-background video {
+            min-width: 100%;
+            min-height: 100%;
+            width: auto;
+            height: auto;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            object-fit: cover;
+        }
+
+        .video-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.4);
+            z-index: -1;
+        }
+
+        /* Transparent Header */
+        .header {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 1rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            transition: all 0.3s ease;
+        }
+
+        .header:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .logo {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: white;
+            font-weight: 500;
+            transition: all 0.3s;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+        }
+
+        .nav-links a:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        .page-header {
+            text-align: center;
+            margin-bottom: 3rem;
+            color: white;
+        }
+
+        .page-header h1 {
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            text-shadow: 3px 3px 6px rgba(0,0,0,0.7);
+            background: linear-gradient(45deg, #fff, #f0f0f0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .page-header p {
+            font-size: 1.2rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.7);
+            opacity: 0.9;
+        }
+
+        .filters {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 2rem;
+            border-radius: 20px;
+            margin-bottom: 2rem;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+
+        .filter-row {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .filter-group label {
+            font-weight: 600;
+            color: white;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.7);
+        }
+
+        .filter-group select,
+        .filter-group input {
+            padding: 0.8rem;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            font-size: 1rem;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            color: white;
+            transition: all 0.3s;
+        }
+
+        .filter-group select::placeholder,
+        .filter-group input::placeholder {
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .filter-group select:focus,
+        .filter-group input:focus {
+            outline: none;
+            border-color: rgba(255, 255, 255, 0.6);
+            background: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+        }
+
+        .filter-group select option {
+            background: #333;
+            color: white;
+        }
+
+        .filter-btn {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 0.8rem 2rem;
+            border-radius: 25px;
             cursor: pointer;
             font-size: 1rem;
-            margin-left: 1rem;
+            font-weight: 600;
+            transition: all 0.3s;
+            margin-top: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
         }
-        #audio-toggle[aria-pressed="true"] {
-            background: linear-gradient(90deg,#9d4edd,#f72585);
-            box-shadow: 0 2px 8px #0004;
+
+        .filter-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+        }
+
+        .books-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+
+        .book-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            transition: all 0.3s;
+        }
+
+        .book-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .book-image {
+            width: 100%;
+            height: 250px;
+            background: linear-gradient(45deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 4rem;
+            color: rgba(255,255,255,0.8);
+            position: relative;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .book-image img { width:100%; height:100%; object-fit:cover; display:block; }
+
+        .book-content {
+            padding: 1.5rem;
+            color: white;
+        }
+
+        .book-category {
+            display: inline-block;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            padding: 0.4rem 1rem;
+            border-radius: 25px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        .book-title {
+            font-size: 1.3rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+            color: white;
+            line-height: 1.4;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.7);
+        }
+
+        .book-author {
+            color: rgba(255,255,255,0.8);
+            font-weight: 600;
+            margin-bottom: 1rem;
+            font-size: 1rem;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+
+        .book-description {
+            color: rgba(255,255,255,0.7);
+            line-height: 1.6;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+        }
+
+        .book-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            font-size: 0.85rem;
+            color: rgba(255,255,255,0.6);
+        }
+
+        .book-prices {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .price {
+            font-weight: bold;
+            font-size: 1.1rem;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+
+        .buy-price {
+            color: #4ade80;
+        }
+
+        .rent-price {
+            color: #38bdf8;
+        }
+
+        .book-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 0.8rem;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+            text-align: center;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+
+        .btn-buy {
+            background: linear-gradient(45deg, #22c55e, #16a34a);
+            color: white;
+            box-shadow: 0 4px 15px rgba(34, 197, 94, 0.3);
+        }
+
+        .btn-buy:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(34, 197, 94, 0.4);
+        }
+
+        .btn-rent {
+            background: linear-gradient(45deg, #0ea5e9, #0284c7);
+            color: white;
+            box-shadow: 0 4px 15px rgba(14, 165, 233, 0.3);
+        }
+
+        .btn-rent:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(14, 165, 233, 0.4);
+        }
+
+        .no-books {
+            text-align: center;
+            color: white;
+            font-size: 1.2rem;
+            margin-top: 3rem;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 3rem;
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+
+        .genre-tags {
+            margin-bottom: 1rem;
+        }
+
+        .genre-tag {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 0.3rem 0.8rem;
+            border-radius: 15px;
+            font-size: 0.7rem;
+            margin-right: 0.3rem;
+            margin-bottom: 0.3rem;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        @media (max-width: 768px) {
+            .nav {
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            .nav-links {
+                gap: 1rem;
+            }
+
+            .books-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .filter-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .filter-group {
+                width: 100%;
+            }
+
+            .page-header h1 {
+                font-size: 2.5rem;
+            }
+        }
+
+        /* Loading animation for video */
+        .video-loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            z-index: -2;
         }
     </style>
 </head>
-<body class="antialiased">
-
-    <div class="spline-background">
-        <!-- fullscreen looping MP4 video for Books section -->
-        <video id="bg-video" autoplay loop muted playsinline>
+<body>
+    <!-- Background Video -->
+    <div class="video-background">
+        <div class="video-loading"></div>
+        <video autoplay muted loop playsinline id="bgVideo">
             <source src="{{ url_for('static', filename='books.mp4') }}" type="video/mp4">
-            Your browser does not support the video tag.
+            <!-- Fallback gradient background -->
         </video>
-
-        <!-- background audio (looping). Place your MP3 at static/audio/books_ambience.mp3 -->
-        <audio id="bg-audio" loop preload="auto">
-            <source src="{{ url_for('static', filename='books.mp4') }}" type="audio/mpeg">
-            Your browser does not support the audio element.
-        </audio>
+        <div class="video-overlay"></div>
     </div>
 
-    <header class="main-header">
-        <a href="{{ url_for('home') }}" class="logo-link">
-            <span class="logo-text">Arcade and Archives</span>
-        </a>
-        <nav class="main-nav">
-            <a href="{{ url_for('home') }}">Home</a>
-            <a href="{{ url_for('books') }}">Books</a>
-            <a href="{{ url_for('video_games') }}">Video Games</a>
-            <a href="{{ url_for('cafe') }}">Cafe</a>
-            <!-- audio toggle button -->
-            <button id="audio-toggle" aria-pressed="false" title="Toggle sound">🔈</button>
+    <header class="header">
+        <nav class="nav">
+            <div class="logo">A&A Store</div>
+            <ul class="nav-links">
+                <li><a href="{{ url_for('index') }}">Home</a></li>
+                <li><a href="{{ url_for('books') }}">Books</a></li>
+                <li><a href="{{ url_for('video_games') }}">Video Games</a></li>
+                <li><a href="{{ url_for('cafe') }}">Cafe</a></li>
+                <li><a href="{{ url_for('cart') }}">Cart (<span data-cart-count>{{ cart_count or 0 }}</span>)</a></li>
+                <li><a href="{{ url_for('logout') }}">Logout</a></li>
+            </ul>
         </nav>
     </header>
 
-    <main class="hero-section">
-        <div class="hero-content">
-            <div class="hero-text">
-                <h1>Cozy Library</h1>
-                <p>Explore a collection of hand-picked tales and curiosities. Browse the shelves, summon a short story, or settle in and read.</p>
-                <a class="hero-btn" href="{{ url_for('books') }}">Browse Books</a>
-                <a class="hero-btn" href="{{ url_for('home') }}">Back Home</a>
-            </div>
+    <div class="container">
+        <div class="page-header">
+            <h1>📚 Books Library</h1>
+            <p>Discover manga, novels, light novels, and more!</p>
         </div>
-    </main>
+
+        <div class="filters">
+            <form method="GET">
+                <div class="filter-row">
+                    <div class="filter-group">
+                        <label for="category">Category:</label>
+                        <select name="category" id="category">
+                            <option value="">All Categories</option>
+                            {% for category in categories %}
+                                <option value="{{ category }}" 
+                                    {% if selected_category == category %}selected{% endif %}>
+                                    {{ category }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="filter-group">
+                        <label for="search">Search:</label>
+                        <input type="text" name="search" id="search" 
+                               placeholder="Search by title, author, or description..." 
+                               value="{{ search_term or '' }}">
+                    </div>
+                </div>
+                <button type="submit" class="filter-btn">Apply Filters</button>
+            </form>
+        </div>
+
+        {% if books %}
+          <div class="books-grid">
+            {% for book in books %}
+            <div class="book-card">
+              <div class="book-image">
+                {% if book.image %}
+                  <img
+                    src="{{ url_for('static', filename=book.image) }}"
+                    alt="{{ book.title }}"
+                    loading="lazy"
+                    onerror="this.remove(); this.parentElement.textContent='📖';"
+                  >
+                {% else %}
+                  📖
+                {% endif %}
+              </div>
+              <div class="book-content">
+                <span class="book-category">{{ book.category }}</span>
+                <h3 class="book-title">{{ book.title }}</h3>
+                <div class="book-author">by {{ book.author }}</div>
+                
+                {% if book.genre %}
+                <div class="genre-tags">
+                    {% for genre in book.genre.split(',') %}
+                        <span class="genre-tag">{{ genre.strip() }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                
+                <p class="book-description">{{ book.description }}</p>
+                
+                <div class="book-meta">
+                    {% if book.pages %}
+                        <span>{{ book.pages }} pages</span>
+                    {% endif %}
+                    {% if book.publication_year %}
+                        <span>{{ book.publication_year }}</span>
+                    {% endif %}
+                </div>
+                
+                <div class="book-prices">
+                    <span class="price buy-price">Buy: ${{ "%.2f"|format(book.buy_price) }}</span>
+                    <span class="price rent-price">Rent: ${{ "%.2f"|format(book.rent_price) }}</span>
+                </div>
+                
+                <div class="book-actions">
+                    <button class="btn btn-buy" onclick="purchaseBook({{ book.id }}, '{{ book.title }}', {{ book.buy_price }})">
+                        Buy Now
+                    </button>
+                    <button class="btn btn-rent" onclick="rentBook({{ book.id }}, '{{ book.title }}', {{ book.rent_price }})">
+                        Rent (7 days)
+                    </button>
+                </div>
+                <div class="book-actions" style="margin-top:.5rem;">
+                    <button class="btn btn-rent" style="background:linear-gradient(45deg,#8b5cf6,#6d28d9)" 
+                            onclick="addToCart({{ book.id }}, 'book', 'buy')">
+                        Add to Cart (Buy)
+                    </button>
+                    <button class="btn btn-secondary" style="background:#475569"
+                            onclick="addToCart({{ book.id }}, 'book', 'rent')">
+                        Add to Cart (Rent)
+                    </button>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        {% else %}
+            <div class="no-books">
+                <h3>No books found</h3>
+                <p>Try adjusting your search criteria or browse all categories.</p>
+            </div>
+        {% endif %}
+    </div>
 
     <script>
-        const logoLink = document.querySelector('.logo-link');
-        const logoVideo = logoLink ? logoLink.querySelector('.logo-video') : null;
-        if (logoLink && logoVideo) {
-            logoLink.addEventListener('mouseenter', () => logoVideo.play());
-            logoLink.addEventListener('mouseleave', () => { logoVideo.currentTime = 0; });
-        }
+        // Video error handling
+        document.getElementById('bgVideo').addEventListener('error', function() {
+            console.log('Video failed to load, using fallback background');
+            this.style.display = 'none';
+        });
 
-        // audio controls for Books page
-        const bgAudio = document.getElementById('bg-audio');
-        const audioToggle = document.getElementById('audio-toggle');
-
-        async function tryPlayAudio() {
-            if (!bgAudio) return;
-            try {
-                await bgAudio.play();
-                audioToggle.textContent = '🔊';
-                audioToggle.setAttribute('aria-pressed','true');
-            } catch (err) {
-                // autoplay blocked; keep audio paused until user presses the button
-                audioToggle.textContent = '🔈';
-                audioToggle.setAttribute('aria-pressed','false');
+        function purchaseBook(bookId, title, price) {
+            if (confirm(`Purchase "${title}" for $${price.toFixed(2)}?`)) {
+                fetch('/api/purchase/book', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ bookId: bookId })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(data.message);
+                    } else {
+                        alert('Error: ' + (data.error || 'Purchase failed'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('An error occurred during purchase');
+                });
             }
         }
 
-        audioToggle.addEventListener('click', async () => {
-            if (!bgAudio) return;
-            if (bgAudio.paused) {
-                try {
-                    await bgAudio.play();
-                    audioToggle.textContent = '🔊';
-                    audioToggle.setAttribute('aria-pressed','true');
-                } catch (e) {
-                    console.warn('Audio play blocked', e);
+        function rentBook(bookId, title, price) {
+            if (confirm(`Rent "${title}" for $${price.toFixed(2)} (7 days)?`)) {
+                fetch('/api/rent/book', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ bookId: bookId })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(data.message);
+                    } else {
+                        alert('Error: ' + (data.error || 'Rental failed'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('An error occurred during rental');
+                });
+            }
+        }
+
+        function addToCart(itemId, itemType, action) {
+            fetch('/api/cart/add', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ itemId, itemType, action, quantity: 1 })
+            }).then(r => r.json())
+             .then(d => {
+                if (d.success) {
+                    const nodes = document.querySelectorAll('[data-cart-count]');
+                    nodes.forEach(n => n.textContent = d.count);
+                } else {
+                    alert(d.error || 'Failed to add to cart');
                 }
-            } else {
-                bgAudio.pause();
-                audioToggle.textContent = '🔈';
-                audioToggle.setAttribute('aria-pressed','false');
-            }
-        });
-
-        // try to start audio after first user interaction
-        window.addEventListener('pointerdown', function once() {
-            tryPlayAudio();
-            window.removeEventListener('pointerdown', once);
-        });
+             }).catch(() => alert('Error adding to cart'));
+        }
     </script>
 </body>
 </html>
