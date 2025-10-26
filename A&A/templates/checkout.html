@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Checkout - A&A Store</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin:0; color:#fff; background: radial-gradient(1200px 600px at 20% -10%, #6b7cff55, #000000 60%); }
+    .header { position: sticky; top:0; z-index:10; background: rgba(255,255,255,0.08); backdrop-filter: blur(10px); padding: 1rem 2rem; border-bottom: 1px solid rgba(255,255,255,0.15); }
+    .nav { max-width: 1100px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; }
+    .logo { font-weight: 800; letter-spacing:0.5px; }
+    .nav a { color:#fff; text-decoration:none; margin-left:1rem; padding: .4rem .7rem; border-radius:8px; }
+    .nav a:hover { background: rgba(255,255,255,0.15); }
+    .container { max-width: 1100px; margin: 2rem auto; padding: 0 1rem; display:grid; gap:1.5rem; grid-template-columns: 1.2fr .8fr; }
+    .card { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 16px; padding: 1rem; }
+    h1 { margin: 0 0 1rem; }
+    .field { display:grid; gap:.25rem; margin-bottom: .8rem; }
+    label { opacity:.9; }
+    input, select { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); color:#fff; padding:.6rem .7rem; border-radius:10px; }
+    .row { display:grid; grid-template-columns: 1fr 1fr; gap:.6rem; }
+    .btn { cursor:pointer; border:none; border-radius:10px; padding:.8rem 1rem; color:#fff; background:#22c55e; width:100%; font-weight:600; }
+    .muted { opacity:.9; }
+    .items { display:grid; gap:.6rem; }
+    .item { display:flex; align-items:center; justify-content:space-between; background: rgba(0,0,0,0.2); padding:.6rem .8rem; border-radius: 10px; }
+    .right { text-align:right; }
+    .total { display:flex; align-items:center; justify-content:space-between; border-top:1px dashed rgba(255,255,255,0.2); margin-top: .8rem; padding-top: .8rem; font-weight:700; }
+    .help { font-size:.9rem; opacity:.9; }
+    @media (max-width: 900px) { .container { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <nav class="nav">
+      <div class="logo">A&A Store</div>
+      <div>
+        <a href="{{ url_for('index') }}">Home</a>
+        <a href="{{ url_for('cart') }}">Cart</a>
+        <a href="{{ url_for('history_page') }}">History</a>
+        <a href="{{ url_for('logout') }}">Logout</a>
+      </div>
+    </nav>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <h1>Payment Details</h1>
+      <form id="payForm" onsubmit="return submitPayment(event)">
+        <div class="field">
+          <label for="name">Full Name</label>
+          <input id="name" name="name" placeholder="Jane Doe" required />
+        </div>
+        <div class="field">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" placeholder="jane@example.com" required />
+        </div>
+        <div class="row">
+          <div class="field">
+            <label for="method">Payment Method</label>
+            <select id="method" name="method" onchange="togglePaymentFields()">
+              <option value="Card">Card</option>
+              <option value="UPI">UPI</option>
+              <option value="COD">Cash on Delivery</option>
+              <option value="Demo">Demo Payment</option>
+            </select>
+          </div>
+          <div class="field" id="cardField">
+            <label for="card">Card Number</label>
+            <input id="card" name="card" placeholder="4242 4242 4242 4242" />
+          </div>
+          <div class="field" id="upiField" style="display:none">
+            <label for="upi">UPI ID</label>
+            <input id="upi" name="upi" placeholder="name@bank" />
+          </div>
+        </div>
+        <div class="help">This is a demo checkout. No real payment will be processed.</div>
+        <div style="margin-top:1rem">
+          <button class="btn" type="submit">Pay ${{ '%.2f'|format(subtotal) }}</button>
+        </div>
+      </form>
+    </section>
+
+    <aside class="card">
+      <h2>Order Summary</h2>
+      {% if items %}
+        <div class="items">
+          {% for it in items %}
+            <div class="item">
+              <div>
+                <div><strong>{{ it.title }}</strong></div>
+                <div class="muted">{{ it.item_type|capitalize }} • {{ 'Buy' if it.action=='buy' else 'Rent' }} x{{ it.quantity }}</div>
+              </div>
+              <div class="right">${{ '%.2f'|format(it.unit_price * it.quantity) }}</div>
+            </div>
+          {% endfor %}
+        </div>
+        <div class="total">
+          <div>Total</div>
+          <div>${{ '%.2f'|format(subtotal) }}</div>
+        </div>
+      {% else %}
+        <p>Your cart is empty.</p>
+      {% endif %}
+    </aside>
+  </main>
+
+  <script>
+    function togglePaymentFields() {
+      const method = document.getElementById('method').value;
+      document.getElementById('cardField').style.display = (method === 'Card') ? 'block' : 'none';
+      document.getElementById('upiField').style.display = (method === 'UPI') ? 'block' : 'none';
+    }
+    function submitPayment(e){
+      e.preventDefault();
+      const name = document.getElementById('name').value.trim();
+      const email = document.getElementById('email').value.trim();
+      const method = document.getElementById('method').value;
+      const body = {
+        buyer: { name, email },
+        paymentMethod: method
+      };
+      fetch('/api/cart/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      }).then(r => r.json()).then(d => {
+        if (d.success) {
+          // Redirect to history page
+          window.location.href = '/history';
+        } else {
+          alert(d.error || 'Payment failed');
+        }
+      }).catch(() => alert('Network error'));
+      return false;
+    }
+  </script>
+</body>
+</html>

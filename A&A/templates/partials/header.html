@@ -4,6 +4,9 @@
     <a href="{{ url_for('books') }}">Books</a>
     <a href="{{ url_for('video_games') }}">Video Games</a>
     <a href="{{ url_for('cafe') }}">Cafe</a>
+    {% if session.get('user') %}
+      <a href="{{ url_for('history_page') }}">History</a>
+    {% endif %}
     
     {% if session.get('user') %}
       <span class="user-greeting">Hi, {{ session.get('username') or session.get('user') }}!</span>

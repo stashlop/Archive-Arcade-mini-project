@@ -160,6 +160,7 @@
                 <li><a href="{{ url_for('books') }}">Books</a></li>
                 <li><a href="{{ url_for('video_games') }}">Video Games</a></li>
                 <li><a href="{{ url_for('cafe') }}">Cafe</a></li>
+                <li><a href="{{ url_for('history_page') }}">History</a></li>
                 <li><a href="{{ url_for('cart') }}">Cart (<span data-cart-count>{{ cart_count or 0 }}</span>)</a></li>
                 <li><a href="{{ url_for('logout') }}">Logout</a></li>
             </ul>
@@ -201,8 +202,8 @@
                 {% for g in games %}
                 <div class="game-card">
                     <div class="game-image">
-                        {% if g.image %}
-                            <img src="{{ url_for('static', filename=g.image) }}" alt="{{ g.title }}">
+                        {% if g.image or g.image_static %}
+                            <img src="{{ url_for('static', filename=(g.image_static or g.image)) }}" alt="{{ g.title }}">
                         {% else %}
                             🎮
                         {% endif %}

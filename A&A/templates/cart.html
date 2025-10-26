@@ -41,6 +41,7 @@
         <a href="{{ url_for('books') }}">Books</a>
         <a href="{{ url_for('video_games') }}">Video Games</a>
         <a href="{{ url_for('cafe') }}">Cafe</a>
+        <a href="{{ url_for('history_page') }}">History</a>
         <a href="{{ url_for('logout') }}">Logout</a>
       </div>
     </nav>
@@ -68,6 +69,7 @@
       <div class="summary">
         <div><strong>Subtotal:</strong> $<span id="subtotal">{{ '%.2f'|format(subtotal) }}</span></div>
         <div>
+          <button class="btn-secondary" data-history-url="{{ url_for('history_page') }}" onclick="goHistory(this)">History</button>
           <button class="btn-secondary" onclick="clearCart()">Clear Cart</button>
           <button class="btn-primary" onclick="checkout()">Checkout</button>
         </div>
@@ -79,6 +81,10 @@
   </main>
 
   <script>
+    function goHistory(el){
+      var url = el && el.getAttribute('data-history-url');
+      if (url) window.location.href = url;
+    }
     function refreshBadge(count) {
       const nodes = document.querySelectorAll('[data-cart-count]');
       nodes.forEach(n => n.textContent = count);

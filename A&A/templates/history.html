@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Purchase History - A&A Store</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin:0; color:#fff; background: radial-gradient(1200px 600px at 20% -10%, #6b7cff55, #000000 60%); }
+    .header { position: sticky; top:0; z-index:10; background: rgba(255,255,255,0.08); backdrop-filter: blur(10px); padding: 1rem 2rem; border-bottom: 1px solid rgba(255,255,255,0.15); }
+    .nav { max-width: 1100px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; }
+    .logo { font-weight: 800; letter-spacing:0.5px; }
+    .nav a { color:#fff; text-decoration:none; margin-left:1rem; padding: .4rem .7rem; border-radius:8px; }
+    .nav a:hover { background: rgba(255,255,255,0.15); }
+    .container { max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { margin: 0 0 1rem; }
+    .card { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 16px; padding: 1rem; }
+    .list { display:grid; gap:.8rem; }
+    .entry { background: rgba(0,0,0,0.2); border-radius: 12px; padding: .8rem; }
+    .top { display:flex; align-items:center; justify-content:space-between; }
+    .muted { opacity:.85; }
+    .items { margin-top:.5rem; display:grid; gap:.3rem; }
+    .pill { font-size:.8rem; padding:.2rem .5rem; border-radius:999px; background: rgba(255,255,255,0.15); margin-left:.5rem; }
+    .empty { text-align:center; padding:2rem; opacity:.9; }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <nav class="nav">
+      <div class="logo">A&A Store</div>
+      <div>
+        <a href="{{ url_for('index') }}">Home</a>
+        <a href="{{ url_for('cart') }}">Cart</a>
+        <a href="{{ url_for('logout') }}">Logout</a>
+      </div>
+    </nav>
+  </header>
+
+  <main class="container">
+    <h1>Purchase History</h1>
+    <div class="card">
+      <div id="history" class="list"></div>
+      <div id="empty" class="empty" style="display:none">No purchases yet.</div>
+    </div>
+  </main>
+
+  <script>
+    async function loadHistory(){
+      try {
+        const res = await fetch('/api/purchase/history');
+        const data = await res.json();
+        const list = document.getElementById('history');
+        const empty = document.getElementById('empty');
+        list.innerHTML = '';
+        if (!Array.isArray(data) || data.length === 0) {
+          empty.style.display = 'block';
+          return;
+        }
+        empty.style.display = 'none';
+        data.forEach(h => {
+          const div = document.createElement('div');
+          div.className = 'entry';
+          const date = new Date(h.date).toLocaleString();
+          const total = Number(h.total || 0).toFixed(2);
+          const buyer = h.buyer?.name || '';
+          const email = h.buyer?.email || '';
+          div.innerHTML = `
+            <div class="top">
+              <div>
+                <strong>Order #${h.id}</strong>
+                <span class="pill">${date}</span>
+              </div>
+              <div><strong>$${total}</strong></div>
+            </div>
+            <div class="muted">${buyer} ${email ? '• ' + email : ''}</div>
+            <div class="items">${(h.items||[]).map(it => `
+              <div>${it.title} <span class="pill">${(it.item_type||'').toString().toUpperCase()}</span> <span class="pill">${it.action === 'rent' ? 'Rent' : 'Buy'}</span> x${it.quantity} — $${(Number(it.unit_price)*Number(it.quantity)).toFixed(2)}</div>
+            `).join('')}</div>
+          `;
+          list.appendChild(div);
+        })
+      } catch (e) {
+        alert('Failed to load history');
+      }
+    }
+    loadHistory();
+  </script>
+</body>
+</html>

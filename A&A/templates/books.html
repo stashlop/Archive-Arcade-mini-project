@@ -454,6 +454,7 @@
                 <li><a href="{{ url_for('books') }}">Books</a></li>
                 <li><a href="{{ url_for('video_games') }}">Video Games</a></li>
                 <li><a href="{{ url_for('cafe') }}">Cafe</a></li>
+                <li><a href="{{ url_for('history_page') }}">History</a></li>
                 <li><a href="{{ url_for('cart') }}">Cart (<span data-cart-count>{{ cart_count or 0 }}</span>)</a></li>
                 <li><a href="{{ url_for('logout') }}">Logout</a></li>
             </ul>
@@ -498,9 +499,9 @@
             {% for book in books %}
             <div class="book-card">
               <div class="book-image">
-                {% if book.image %}
-                  <img
-                    src="{{ url_for('static', filename=book.image) }}"
+                                {% if book.image or book.image_static %}
+                                    <img
+                                        src="{{ url_for('static', filename=(book.image_static or book.image)) }}"
                     alt="{{ book.title }}"
                     loading="lazy"
                     onerror="this.remove(); this.parentElement.textContent='📖';"

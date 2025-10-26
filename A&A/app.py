@@ -146,7 +146,12 @@ def create_app(config=None):
                 img = (b.get('image') or '').strip()
                 b['image_static'] = None
                 if img:
-                    candidates = [img] if '/' in img else [img, f'images/books/{img}', f'images/{img}']
+                    # Try a few common locations inside static
+                    candidates = [img] if '/' in img else [
+                        img,
+                        f'images/books/{img}',
+                        f'images/{img}'
+                    ]
                     for cand in candidates:
                         if os.path.exists(os.path.join(static_root, cand)):
                             b['image_static'] = cand
@@ -188,14 +193,14 @@ def create_app(config=None):
                 
                 # Seed with sample data
                 sample_games = [
-                    ("Baldur's Gate 3", "Epic CRPG adventure with deep choices and co-op.", "RPG,Co-op", 59.99, 9.99, "Baldurs_Gate_3.jpeg"),
-                    ("Alan Wake 2", "Psychological horror thriller with cinematic storytelling.", "Horror,Narrative", 49.99, 7.99, "Alan_Wake_2.jpeg"),
-                    ("Cyberpunk 2077", "Open-world RPG in a neon-soaked metropolis.", "RPG,Open-World", 29.99, 6.99, "cyberpunk.jpeg"),
-                    ("Red Dead Redemption 2", "Open-world western with cinematic storytelling.", "Open-World,Action", 39.99, 8.99, "red.jpeg"),
-                    ("The Witcher 3", "Open-world RPG full of monsters and choices.", "RPG,Open-World", 29.99, 6.49, "witcher.jpeg"),
-                    ("Disco Elysium", "A groundbreaking RPG focused on choice and investigation.", "Indie,RPG", 19.99, 4.49, "Disco.jpeg"),
-                    ("Silent Hill 2 (Remake)", "Reimagined survival-horror classic.", "Horror,Survival", 39.99, 8.49, "hill.jpeg"),
-                    ("God of War", "A mythic reimagining: father, son, and monsters.", "Action,Adventure", 29.99, 6.99, "god.jpeg")
+                    ("Baldur's Gate 3", "Epic CRPG adventure with deep choices and co-op.", "RPG,Co-op", 59.99, 9.99, "images/games/Baldurs_Gate_3.jpeg"),
+                    ("Alan Wake 2", "Psychological horror thriller with cinematic storytelling.", "Horror,Narrative", 49.99, 7.99, "images/games/Alan_Wake_2.jpeg"),
+                    ("Cyberpunk 2077", "Open-world RPG in a neon-soaked metropolis.", "RPG,Open-World", 29.99, 6.99, "images/games/cyberpunk.jpeg"),
+                    ("Red Dead Redemption 2", "Open-world western with cinematic storytelling.", "Open-World,Action", 39.99, 8.99, "images/games/red.jpeg"),
+                    ("The Witcher 3", "Open-world RPG full of monsters and choices.", "RPG,Open-World", 29.99, 6.49, "images/games/witcher.jpeg"),
+                    ("Disco Elysium", "A groundbreaking RPG focused on choice and investigation.", "Indie,RPG", 19.99, 4.49, "images/games/Disco.jpeg"),
+                    ("Silent Hill 2 (Remake)", "Reimagined survival-horror classic.", "Horror,Survival", 39.99, 8.49, "images/games/hill.jpeg"),
+                    ("God of War", "A mythic reimagining: father, son, and monsters.", "Action,Adventure", 29.99, 6.99, "images/games/god.jpeg")
                 ]
                 
                 cur.executemany("""
@@ -204,12 +209,53 @@ def create_app(config=None):
                 """, sample_games)
                 conn.commit()
                 
-            # Query games
-            cur.execute("SELECT * FROM games ORDER BY id")
+            # Optional filters
+            category = request.args.get('category', '').strip()
+            search = request.args.get('search', '').strip()
+
+            # Build filtered query
+            query = "SELECT * FROM games WHERE 1=1"
+            params = []
+            if category:
+                query += " AND category LIKE ?"
+                params.append(f"%{category}%")
+            if search:
+                query += " AND (title LIKE ? OR description LIKE ?)"
+                params.extend([f"%{search}%", f"%{search}%"]) 
+            query += " ORDER BY id"
+
+            cur.execute(query, params)
             games = [dict(row) for row in cur.fetchall()]
+
+            # Build distinct category list (split comma-separated tags)
+            cur.execute("SELECT category FROM games")
+            cats = set()
+            for (cat_str,) in cur.fetchall():
+                if not cat_str:
+                    continue
+                for token in str(cat_str).split(','):
+                    token = token.strip()
+                    if token:
+                        cats.add(token)
+            categories = sorted(cats)
+
+            # Resolve image path under /static for each game
+            static_root = app.static_folder
+            for g in games:
+                img = (g.get('image') or '').strip()
+                g['image_static'] = None
+                if img:
+                    candidates = [img] if '/' in img else [
+                        img,
+                        f'images/games/{img}',
+                        f'images/{img}'
+                    ]
+                    for cand in candidates:
+                        if os.path.exists(os.path.join(static_root, cand)):
+                            g['image_static'] = cand
+                            break
             conn.close()
-            
-            return render_template('video_games.html', games=games)
+            return render_template('video_games.html', games=games, categories=categories)
             
         except Exception as e:
             return f"Database error: {str(e)}", 500
@@ -227,6 +273,21 @@ def create_app(config=None):
         items = session.get('cart', {}).get('items', [])
         subtotal = sum((i.get('unit_price', 0) * i.get('quantity', 1)) for i in items)
         return render_template('cart.html', items=items, subtotal=round(subtotal, 2))
+
+    @app.route('/checkout')
+    def checkout_page():
+        if 'user' not in session:
+            return redirect(url_for('login'))
+        items = session.get('cart', {}).get('items', [])
+        subtotal = sum((i.get('unit_price', 0) * i.get('quantity', 1)) for i in items)
+        return render_template('checkout.html', items=items, subtotal=round(subtotal, 2))
+
+    @app.route('/history')
+    def history_page():
+        if 'user' not in session:
+            return redirect(url_for('login'))
+        # Render a page that loads history via API for current user
+        return render_template('history.html')
 
     # ---------------- Blueprints ----------------
     app.register_blueprint(games_bp)

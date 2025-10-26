@@ -35,30 +35,30 @@ def init_books_db():
             # Seed with sample books
             sample_books = [
                 # Manga
-                ("One Piece Vol. 1", "Eiichiro Oda", "...", "Manga", "Adventure,Shounen", 9.99, 2.99, "onepiece.jpg", "978-1421506333", 200, 1999),
+                ("One Piece Vol. 1", "Eiichiro Oda", "...", "Manga", "Adventure,Shounen", 9.99, 2.99, "images/books/onepiece.jpg", "978-1421506333", 200, 1999),
                 ("Attack on Titan Vol. 1", "Hajime Isayama",
                  "Humanity fights for survival against giant titans.",
-                 "Manga", "Action,Drama", 10.99, 3.49, "aot1.jpeg",
+                 "Manga", "Action,Drama", 10.99, 3.49, "images/books/aot1.jpeg",
                  "978-1612620244", 192, 2012),
-                ("Demon Slayer Vol. 1", "Koyoharu Gotouge", "...", "Manga", "Action,Supernatural", 9.99, 2.99, "demonslayer.jpg", "978-1974700523", 192, 2018),
+                ("Demon Slayer Vol. 1", "Koyoharu Gotouge", "...", "Manga", "Action,Supernatural", 9.99, 2.99, "images/books/DemonSlayerVol1.jpg", "978-1974700523", 192, 2018),
                 
                 # Light Novels
-                ("Sword Art Online Vol. 1", "Reki Kawahara", "Trapped in a virtual MMORPG where death is real.", "Light Novel", "Sci-Fi,Romance", 14.99, 4.99, "sao.jpg", "978-0316371247", 240, 2014),
-                ("Re:Zero Vol. 1", "Tappei Nagatsuki", "Subaru discovers he can return from death in another world.", "Light Novel", "Fantasy,Psychological", 14.99, 4.99, "rezero.jpg", "978-0316315302", 256, 2016),
-                ("Overlord Vol. 1", "Kugane Maruyama", "A player becomes trapped as his undead character in a game world.", "Light Novel", "Fantasy,Dark", 14.99, 4.99, "overlord.jpg", "978-0316272247", 272, 2016),
+                ("Sword Art Online Vol. 1", "Reki Kawahara", "Trapped in a virtual MMORPG where death is real.", "Light Novel", "Sci-Fi,Romance", 14.99, 4.99, "images/books/sao.jpeg", "978-0316371247", 240, 2014),
+                ("Re:Zero Vol. 1", "Tappei Nagatsuki", "Subaru discovers he can return from death in another world.", "Light Novel", "Fantasy,Psychological", 14.99, 4.99, "images/books/rezero.jpeg", "978-0316315302", 256, 2016),
+                ("Overlord Vol. 1", "Kugane Maruyama", "A player becomes trapped as his undead character in a game world.", "Light Novel", "Fantasy,Dark", 14.99, 4.99, "images/books/overlord.jpg", "978-0316272247", 272, 2016),
                 
                 # Traditional Novels
-                ("Dune", "Frank Herbert", "Epic sci-fi saga on the desert planet Arrakis.", "Novel", "Science Fiction", 16.99, 5.99, "dune.jpg", "978-0441172719", 688, 1965),
-                ("The Hobbit", "J.R.R. Tolkien", "Bilbo Baggins' unexpected journey to reclaim a treasure.", "Novel", "Fantasy", 14.99, 4.99, "hobbit.jpg", "978-0547928227", 300, 1937),
-                ("1984", "George Orwell", "Dystopian masterpiece about surveillance and control.", "Novel", "Dystopian,Classic", 13.99, 4.49, "1984.jpg", "978-0452284234", 328, 1949),
+                ("Dune", "Frank Herbert", "Epic sci-fi saga on the desert planet Arrakis.", "Novel", "Science Fiction", 16.99, 5.99, "images/books/Dune.jpeg", "978-0441172719", 688, 1965),
+                ("The Hobbit", "J.R.R. Tolkien", "Bilbo Baggins' unexpected journey to reclaim a treasure.", "Novel", "Fantasy", 14.99, 4.99, "images/books/hobbit.jpeg", "978-0547928227", 300, 1937),
+                ("1984", "George Orwell", "Dystopian masterpiece about surveillance and control.", "Novel", "Dystopian,Classic", 13.99, 4.49, "images/books/1984.jpg", "978-0452284234", 328, 1949),
                 
                 # Technical Books
-                ("Clean Code", "Robert C. Martin", "A handbook of agile software craftsmanship.", "Technical", "Programming", 49.99, 12.99, "cleancode.jpg", "978-0132350884", 464, 2008),
-                ("Design Patterns", "Gang of Four", "Elements of reusable object-oriented software.", "Technical", "Programming", 54.99, 14.99, "designpatterns.jpg", "978-0201633612", 395, 1994),
+                ("Clean Code", "Robert C. Martin", "A handbook of agile software craftsmanship.", "Technical", "Programming", 49.99, 12.99, "images/books/clean.jpeg", "978-0132350884", 464, 2008),
+                ("Design Patterns", "Gang of Four", "Elements of reusable object-oriented software.", "Technical", "Programming", 54.99, 14.99, "images/books/designpatterns.jpg", "978-0201633612", 395, 1994),
                 
                 # Non-Fiction
-                ("Sapiens", "Yuval Noah Harari", "A brief history of humankind and our species' journey.", "Non-Fiction", "History,Science", 18.99, 6.99, "sapiens.jpg", "978-0062316097", 443, 2014),
-                ("Atomic Habits", "James Clear", "Tiny changes that create remarkable results.", "Non-Fiction", "Self-Help", 16.99, 5.99, "atomichabits.jpg", "978-0735211292", 320, 2018)
+                ("Sapiens", "Yuval Noah Harari", "A brief history of humankind and our species' journey.", "Non-Fiction", "History,Science", 18.99, 6.99, "images/books/sapiens.jpeg", "978-0062316097", 443, 2014),
+                ("Atomic Habits", "James Clear", "Tiny changes that create remarkable results.", "Non-Fiction", "Self-Help", 16.99, 5.99, "images/books/atomic_habits.jpeg", "978-0735211292", 320, 2018)
             ]
             
             cur.executemany("""
