@@ -93,18 +93,26 @@ def create_app(config=None):
                 new_user = User(username=username, password_hash=hashed_pw)
                 db.session.add(new_user)
                 db.session.commit()
+                # Reset and set session identity to the new user
+                session.pop('user', None)
+                session.pop('user_id', None)
                 session['user'] = username
+                session['user_id'] = new_user.id
                 return redirect(url_for('home'))
         return render_template('signup.html')
 
     @app.route('/logout')
     def logout():
+        # Clear all identity and cart data to avoid cross-user leakage
         session.pop('user', None)
+        session.pop('username', None)
+        session.pop('user_id', None)
+        session.pop('cart', None)
         return redirect(url_for('index'))
 
     @app.route('/books')
     def books():
-        if 'user' not in session:
+        if 'user' not in session and 'user_id' not in session:
             return redirect(url_for('login'))
         
         try:
@@ -165,7 +173,7 @@ def create_app(config=None):
 
     @app.route('/video_games')  # Changed from /video-games to /video_games
     def video_games():
-        if 'user' not in session:
+        if 'user' not in session and 'user_id' not in session:
             return redirect(url_for('login'))
         
         try:
@@ -262,13 +270,13 @@ def create_app(config=None):
 
     @app.route('/cafe')
     def cafe():
-        if 'user' not in session:
+        if 'user' not in session and 'user_id' not in session:
             return redirect(url_for('login'))
         return render_template('cafe.html')
 
     @app.route('/cart')
     def cart():
-        if 'user' not in session:
+        if 'user' not in session and 'user_id' not in session:
             return redirect(url_for('login'))
         items = session.get('cart', {}).get('items', [])
         subtotal = sum((i.get('unit_price', 0) * i.get('quantity', 1)) for i in items)
@@ -276,7 +284,7 @@ def create_app(config=None):
 
     @app.route('/checkout')
     def checkout_page():
-        if 'user' not in session:
+        if 'user' not in session and 'user_id' not in session:
             return redirect(url_for('login'))
         items = session.get('cart', {}).get('items', [])
         subtotal = sum((i.get('unit_price', 0) * i.get('quantity', 1)) for i in items)
@@ -284,7 +292,7 @@ def create_app(config=None):
 
     @app.route('/history')
     def history_page():
-        if 'user' not in session:
+        if 'user' not in session and 'user_id' not in session:
             return redirect(url_for('login'))
         # Render a page that loads history via API for current user
         return render_template('history.html')
@@ -308,7 +316,7 @@ def create_app(config=None):
     def require_login_for_restricted():
         path = request.path or '/'
         if any(path.startswith(p) for p in RESTRICTED_PREFIXES):
-            if not session.get('user'):
+            if not session.get('user') and not session.get('user_id'):
                 return redirect(url_for('login'))
 
     return app
