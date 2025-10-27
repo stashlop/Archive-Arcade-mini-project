@@ -111,12 +111,8 @@
         });
     }
     function checkout() {
-      fetch('/api/cart/checkout', { method:'POST' })
-        .then(r => r.json())
-        .then(d => {
-          if (d.success) { alert(d.message || 'Checkout complete'); location.reload(); }
-          else alert(d.error || 'Checkout failed');
-        });
+      // Navigate to the full checkout page so users can choose payment method (Card/UPI/COD/Demo)
+      window.location.href = '/checkout';
     }
   </script>
 </body>
