@@ -4,6 +4,7 @@ import io
 import csv
 from flask import Flask, render_template, request, session, redirect, url_for, flash, jsonify, make_response
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 from models import db, User
 
 # import blueprints safely (package vs script execution)
@@ -71,7 +72,9 @@ def create_app(config=None):
             CREATE TABLE IF NOT EXISTS community_subscribers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 email TEXT UNIQUE NOT NULL,
-                joined_at TEXT NOT NULL
+                joined_at TEXT NOT NULL,
+                display_name TEXT,
+                photo_path TEXT
             )
             """
         )
@@ -88,6 +91,17 @@ def create_app(config=None):
             """
         )
         conn.commit()
+        # add missing columns safely
+        try:
+            cur.execute("PRAGMA table_info(community_subscribers)")
+            cols = {r[1] for r in cur.fetchall()}
+            if 'display_name' not in cols:
+                cur.execute("ALTER TABLE community_subscribers ADD COLUMN display_name TEXT")
+            if 'photo_path' not in cols:
+                cur.execute("ALTER TABLE community_subscribers ADD COLUMN photo_path TEXT")
+            conn.commit()
+        except Exception:
+            pass
 
     # ---------------- Routes ----------------
     @app.route('/')
@@ -711,6 +725,136 @@ def create_app(config=None):
             mid = cur.lastrowid
             conn.close()
             return jsonify({'success': True, 'id': mid})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/community/subscribers', methods=['GET'])
+    def community_subscribers():
+        # List subscribers; obfuscate emails for non-admins
+        is_admin_flag = False
+        try:
+            is_admin_flag = _is_admin()
+        except Exception:
+            is_admin_flag = False
+        try:
+            dbp = _community_db_path()
+            conn = sqlite3.connect(dbp)
+            conn.row_factory = sqlite3.Row
+            _ensure_community_tables(conn)
+            cur = conn.cursor()
+            cur.execute("SELECT id, email, joined_at, display_name, photo_path FROM community_subscribers ORDER BY id DESC LIMIT 200")
+            rows = []
+            for r in cur.fetchall():
+                email = r['email'] or ''
+                def _mask(e):
+                    try:
+                        name, dom = e.split('@', 1)
+                        shown = name[:2]
+                        return f"{shown}{'*'*(max(0,len(name)-2))}@{dom}"
+                    except Exception:
+                        return e
+                masked = email if is_admin_flag else _mask(email)
+                photo_url = None
+                if r['photo_path']:
+                    try:
+                        photo_url = url_for('static', filename=r['photo_path'])
+                    except Exception:
+                        photo_url = None
+                rows.append({
+                    'id': r['id'],
+                    'email': email if is_admin_flag else masked,
+                    'display_name': r['display_name'] or '',
+                    'joined_at': r['joined_at'] or '',
+                    'photo_url': photo_url
+                })
+            conn.close()
+            return jsonify(rows)
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/community/profile', methods=['POST'])
+    def community_profile():
+        # Update subscriber profile (display_name, photo). Requires joined email in session.
+        email = (session.get('community_email') or '').strip().lower()
+        if not email:
+            return jsonify({'success': False, 'error': 'Join the community with your email first from Home'}), 403
+        display_name = (request.form.get('display_name') or '').strip()
+        photo = request.files.get('photo')
+        # Find or create subscriber row
+        from datetime import datetime as _dt
+        try:
+            dbp = _community_db_path()
+            conn = sqlite3.connect(dbp)
+            conn.row_factory = sqlite3.Row
+            _ensure_community_tables(conn)
+            cur = conn.cursor()
+            cur.execute("INSERT OR IGNORE INTO community_subscribers(email, joined_at) VALUES(?, ?)", (email, _dt.utcnow().isoformat()))
+            conn.commit()
+            cur.execute("SELECT id, photo_path FROM community_subscribers WHERE email=?", (email,))
+            row = cur.fetchone()
+            if not row:
+                conn.close()
+                return jsonify({'success': False, 'error': 'Subscriber not found'}), 404
+            sub_id = int(row['id'])
+            photo_path = row['photo_path']
+
+            # Handle upload if provided
+            saved_rel_path = None
+            if photo and getattr(photo, 'filename', ''):
+                fname = secure_filename(photo.filename)
+                ext = ''
+                if '.' in fname:
+                    ext = '.' + fname.rsplit('.', 1)[1].lower()
+                if ext not in ('.png', '.jpg', '.jpeg', '.webp'):
+                    conn.close()
+                    return jsonify({'success': False, 'error': 'Only PNG, JPG, JPEG, WEBP allowed'}), 400
+                # Save under static/uploads/community
+                upload_dir = os.path.join(app.static_folder, 'uploads', 'community')
+                os.makedirs(upload_dir, exist_ok=True)
+                new_name = f"sub_{sub_id}{ext}"
+                abs_path = os.path.join(upload_dir, new_name)
+                photo.save(abs_path)
+                saved_rel_path = os.path.join('uploads', 'community', new_name)
+
+            # Apply updates
+            if display_name:
+                cur.execute("UPDATE community_subscribers SET display_name=? WHERE id=?", (display_name, sub_id))
+            if saved_rel_path:
+                cur.execute("UPDATE community_subscribers SET photo_path=? WHERE id=?", (saved_rel_path, sub_id))
+            conn.commit()
+            conn.close()
+            return jsonify({'success': True})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @app.route('/api/community/me', methods=['GET'])
+    def community_me():
+        email = (session.get('community_email') or '').strip().lower()
+        if not email:
+            return jsonify({'error': 'Not joined'}), 404
+        try:
+            dbp = _community_db_path()
+            conn = sqlite3.connect(dbp)
+            conn.row_factory = sqlite3.Row
+            _ensure_community_tables(conn)
+            cur = conn.cursor()
+            cur.execute("SELECT id, email, display_name, photo_path, joined_at FROM community_subscribers WHERE email=?", (email,))
+            row = cur.fetchone()
+            conn.close()
+            if not row:
+                return jsonify({'error': 'Not found'}), 404
+            photo_url = None
+            if row['photo_path']:
+                try:
+                    photo_url = url_for('static', filename=row['photo_path'])
+                except Exception:
+                    photo_url = None
+            return jsonify({
+                'email': row['email'],
+                'display_name': row['display_name'] or '',
+                'joined_at': row['joined_at'] or '',
+                'photo_url': photo_url
+            })
         except Exception as e:
             return jsonify({'error': str(e)}), 500
 

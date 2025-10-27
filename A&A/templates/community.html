@@ -18,7 +18,8 @@
     .page-header p { color: #e5e7eb; opacity: .9; }
 
     .panel { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 16px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); padding: 1rem; }
-    .layout { display: grid; grid-template-columns: 1.2fr .8fr; gap: 1rem; }
+  .layout { display: grid; grid-template-columns: 1.2fr .8fr; gap: 1rem; }
+  .right-col { display:flex; flex-direction:column; gap:1rem; }
 
     /* Feed */
     .feed { max-height: 70vh; overflow:auto; display:flex; flex-direction:column; gap:.75rem; }
@@ -62,19 +63,49 @@
         <div id="feed" class="feed" aria-live="polite"></div>
       </section>
 
-      <aside class="panel">
-        {% if is_admin %}
-        <h3>Post an Update</h3>
-        <div class="post-box">
-          <textarea id="msg" placeholder="Share an update for everyone..."></textarea>
-          <button id="post-btn">Post</button>
+      <div class="right-col">
+        <div class="panel">
+          {% if is_admin %}
+          <h3>Post an Update</h3>
+          <div class="post-box">
+            <textarea id="msg" placeholder="Share an update for everyone..."></textarea>
+            <button id="post-btn">Post</button>
+          </div>
+          <p style="color:#cbd5e1; font-size:.9rem; margin-top:.75rem;">Only admins can post updates. Everyone can view them.</p>
+          {% else %}
+          <h3>About</h3>
+          <p style="color:#e5e7eb;">You're in! You'll see admin updates here. You joined with {% if session.get('community_email') %}<strong>{{ session.get('community_email') }}</strong>{% else %}your account{% endif %}. No spam, just news.</p>
+          {% endif %}
         </div>
-        <p style="color:#cbd5e1; font-size:.9rem; margin-top:.75rem;">Only admins can post updates. Everyone can view them.</p>
-        {% else %}
-        <h3>About</h3>
-        <p style="color:#e5e7eb;">You're in! You'll see admin updates here. You joined with {% if session.get('community_email') %}<strong>{{ session.get('community_email') }}</strong>{% else %}your account{% endif %}. No spam, just news.</p>
-        {% endif %}
-      </aside>
+
+        <div class="panel">
+          <h3>Your Profile</h3>
+          {% if session.get('community_email') %}
+          <div style="display:flex; gap:1rem; align-items:center; margin-bottom:.5rem;">
+            <img id="me-avatar" alt="Your photo" style="width:56px; height:56px; border-radius:50%; object-fit:cover; background:rgba(0,0,0,.3); border:1px solid rgba(255,255,255,.2); display:none;" />
+            <div>
+              <div id="me-name" style="font-weight:600;"></div>
+              <div style="color:#cbd5e1; font-size:.9rem;">{{ session.get('community_email') }}</div>
+            </div>
+          </div>
+          <form id="profile-form" enctype="multipart/form-data">
+            <label>Display Name</label>
+            <input name="display_name" id="display_name" type="text" placeholder="Your name" style="width:100%; margin:.3rem 0 0.5rem 0; padding:.5rem; border-radius:10px; border:1px solid rgba(255,255,255,.25); background:rgba(0,0,0,.3); color:#fff;" />
+            <label>Photo</label>
+            <input name="photo" id="photo" type="file" accept="image/png,image/jpeg,image/webp" style="display:block; margin:.3rem 0 0.5rem 0;" />
+            <button type="submit" style="padding:.5rem .9rem; border-radius:10px; border:none; cursor:pointer; background: linear-gradient(45deg, #22c55e, #16a34a); color:#fff;">Save</button>
+          </form>
+          <div id="profile-hint" style="display:none; color:#9fd; margin-top:.5rem;">Saved!</div>
+          {% else %}
+          <p style="color:#e5e7eb;">Join from Home with your email to set a display name and photo.</p>
+          {% endif %}
+        </div>
+
+        <div class="panel">
+          <h3>Members</h3>
+          <div id="members" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:.75rem;"></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -131,6 +162,68 @@
     }
 
     fetchMessages();
+
+    // Load current profile for preview
+    async function loadMe(){
+      try{
+        const r = await fetch('/api/community/me');
+        if (!r.ok) return;
+        const me = await r.json();
+        const avatar = document.getElementById('me-avatar');
+        const nameEl = document.getElementById('me-name');
+        const dn = document.getElementById('display_name');
+        if (me.photo_url){ avatar.src = me.photo_url; avatar.style.display = 'block'; }
+        if (me.display_name){ nameEl.textContent = me.display_name; if (dn) dn.value = me.display_name; }
+      }catch(e){ /* ignore */ }
+    }
+    loadMe();
+
+    // Profile submit
+    const profileForm = document.getElementById('profile-form');
+    if (profileForm){
+      profileForm.addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(profileForm);
+        try{
+          const r = await fetch('/community/profile', { method:'POST', body: fd });
+          const d = await r.json();
+          if (d && d.success){
+            document.getElementById('profile-hint').style.display = 'block';
+            setTimeout(()=>{ document.getElementById('profile-hint').style.display='none'; loadMe(); loadMembers(); }, 800);
+          } else {
+            alert(d.error || 'Failed to save');
+          }
+        }catch(e){ alert('Failed to save'); }
+      });
+    }
+
+    // Members list
+    async function loadMembers(){
+      try{
+        const r = await fetch('/api/community/subscribers');
+        const data = await r.json();
+        const wrap = document.getElementById('members');
+        if (!wrap) return;
+        wrap.innerHTML = '';
+        data.forEach(s => {
+          const card = document.createElement('div');
+          card.style.background = 'rgba(0,0,0,0.35)';
+          card.style.border = '1px solid rgba(255,255,255,0.15)';
+          card.style.borderRadius = '12px';
+          card.style.padding = '.6rem';
+          card.innerHTML = `
+            <div style="display:flex; gap:.6rem; align-items:center;">
+              ${s.photo_url ? `<img src="${s.photo_url}" alt="avatar" style="width:40px;height:40px;border-radius:50%;object-fit:cover;"/>` : `<div style=\"width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-weight:700;\">${(s.display_name||s.email||'?').toString().charAt(0).toUpperCase()}</div>`}
+              <div>
+                <div style="font-weight:600;">${escapeHtml(s.display_name || s.email)}</div>
+                <div style="color:#cbd5e1;font-size:.85rem;">${escapeHtml((s.joined_at || '').replace('T',' ').slice(0,19))}</div>
+              </div>
+            </div>`;
+          wrap.appendChild(card);
+        });
+      }catch(e){ /* ignore */ }
+    }
+    loadMembers();
   </script>
 </body>
 </html>
