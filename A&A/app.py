@@ -7,6 +7,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from models import db, User
 
+from sqlalchemy import text
 # import blueprints safely (package vs script execution)
 try:
     from .games_api import games_bp
@@ -42,6 +43,16 @@ def create_app(config=None):
         if not hasattr(app, 'db_initialized'):
             db.create_all()
             init_books_db()  # Initialize books database
+            # Self-heal User table to ensure profile columns exist
+            try:
+                with db.engine.begin() as conn:
+                    cols = [row[1] for row in conn.exec_driver_sql('PRAGMA table_info(users)').fetchall()]
+                    if 'display_name' not in cols:
+                        conn.exec_driver_sql('ALTER TABLE users ADD COLUMN display_name VARCHAR(120)')
+                    if 'photo_path' not in cols:
+                        conn.exec_driver_sql('ALTER TABLE users ADD COLUMN photo_path VARCHAR(255)')
+            except Exception:
+                pass
             # Ensure a default admin user exists for demo access
             try:
                 from sqlalchemy.exc import SQLAlchemyError
@@ -71,6 +82,7 @@ def create_app(config=None):
             """
             CREATE TABLE IF NOT EXISTS community_subscribers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
                 email TEXT UNIQUE NOT NULL,
                 joined_at TEXT NOT NULL,
                 display_name TEXT,
@@ -95,6 +107,8 @@ def create_app(config=None):
         try:
             cur.execute("PRAGMA table_info(community_subscribers)")
             cols = {r[1] for r in cur.fetchall()}
+            if 'user_id' not in cols:
+                cur.execute("ALTER TABLE community_subscribers ADD COLUMN user_id INTEGER")
             if 'display_name' not in cols:
                 cur.execute("ALTER TABLE community_subscribers ADD COLUMN display_name TEXT")
             if 'photo_path' not in cols:
@@ -676,6 +690,10 @@ def create_app(config=None):
             _ensure_community_tables(conn)
             cur = conn.cursor()
             cur.execute("INSERT OR IGNORE INTO community_subscribers(email, joined_at) VALUES(?, ?)", (email, _dt.utcnow().isoformat()))
+            # Link to account if logged in
+            uid = int(session.get('user_id') or 0)
+            if uid:
+                cur.execute("UPDATE community_subscribers SET user_id=? WHERE email=?", (uid, email))
             conn.commit()
             conn.close()
             session['community_email'] = email
@@ -816,12 +834,25 @@ def create_app(config=None):
                 photo.save(abs_path)
                 saved_rel_path = os.path.join('uploads', 'community', new_name)
 
-            # Apply updates
+            # Apply updates to subscriber
             if display_name:
                 cur.execute("UPDATE community_subscribers SET display_name=? WHERE id=?", (display_name, sub_id))
             if saved_rel_path:
                 cur.execute("UPDATE community_subscribers SET photo_path=? WHERE id=?", (saved_rel_path, sub_id))
             conn.commit()
+            # If logged in, also mirror to User profile
+            uid = int(session.get('user_id') or 0)
+            if uid:
+                try:
+                    user = User.query.get(uid)
+                    if user:
+                        if display_name:
+                            user.display_name = display_name
+                        if saved_rel_path:
+                            user.photo_path = saved_rel_path
+                        db.session.commit()
+                except Exception:
+                    db.session.rollback()
             conn.close()
             return jsonify({'success': True})
         except Exception as e:
@@ -913,6 +944,19 @@ def create_app(config=None):
             return { 'is_admin': _is_admin() }
         except Exception:
             return { 'is_admin': False }
+
+    @app.context_processor
+    def inject_user_profile():
+        # Provide current user's display name to templates if available
+        try:
+            uid = session.get('user_id')
+            if uid:
+                u = User.query.get(int(uid))
+                if u and getattr(u, 'display_name', None):
+                    return { 'user_display_name': u.display_name }
+        except Exception:
+            pass
+        return { 'user_display_name': None }
 
     # ---------------- Admin Dashboard ----------------
     def _is_admin():

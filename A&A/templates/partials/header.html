@@ -28,6 +28,9 @@
       <li><a href="{{ url_for('books') }}">Books</a></li>
       <li><a href="{{ url_for('video_games') }}">Video Games</a></li>
       <li><a href="{{ url_for('cafe') }}">Cafe</a></li>
+  {% if session.get('user') %}
+  <li style="opacity:.85;">Hi, {{ user_display_name or session.get('user') }}</li>
+      {% endif %}
       {% if session.get('user') %}
       <li><a href="{{ url_for('history_page') }}">History</a></li>
       {% endif %}
