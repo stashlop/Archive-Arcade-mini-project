@@ -539,14 +539,6 @@
                     <span class="price rent-price">Rent: ${{ "%.2f"|format(book.rent_price) }}</span>
                 </div>
                 
-                <div class="book-actions">
-                    <button class="btn btn-buy" data-id="{{ book.id }}" data-title="{{ book.title }}" data-price="{{ '%.2f'|format(book.buy_price) }}" onclick="purchaseBookEl(this)">
-                        Buy Now
-                    </button>
-                    <button class="btn btn-rent" data-id="{{ book.id }}" data-title="{{ book.title }}" data-price="{{ '%.2f'|format(book.rent_price) }}" onclick="rentBookEl(this)">
-                        Rent (7 days)
-                    </button>
-                </div>
                 <div class="book-actions" style="margin-top:.5rem;">
             <button class="btn btn-rent" style="background:linear-gradient(45deg,#8b5cf6,#6d28d9)" 
                 data-id="{{ book.id }}" data-type="book" data-action="buy" onclick="addToCartEl(this)">
@@ -576,67 +568,7 @@
             this.style.display = 'none';
         });
 
-        function purchaseBook(bookId, title, price) {
-            if (confirm(`Purchase "${title}" for $${price.toFixed(2)}?`)) {
-                fetch('/api/purchase/book', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ bookId: bookId })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert(data.message);
-                    } else {
-                        alert('Error: ' + (data.error || 'Purchase failed'));
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    alert('An error occurred during purchase');
-                });
-            }
-        }
-
-        function rentBook(bookId, title, price) {
-            if (confirm(`Rent "${title}" for $${price.toFixed(2)} (7 days)?`)) {
-                fetch('/api/rent/book', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ bookId: bookId })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert(data.message);
-                    } else {
-                        alert('Error: ' + (data.error || 'Rental failed'));
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    alert('An error occurred during rental');
-                });
-            }
-        }
-
-        // Wrapper helpers to avoid inline JS args that confuse linters
-        function purchaseBookEl(el){
-            const id = Number(el.getAttribute('data-id'));
-            const title = el.getAttribute('data-title') || '';
-            const price = Number(el.getAttribute('data-price') || 0);
-            purchaseBook(id, title, price);
-        }
-        function rentBookEl(el){
-            const id = Number(el.getAttribute('data-id'));
-            const title = el.getAttribute('data-title') || '';
-            const price = Number(el.getAttribute('data-price') || 0);
-            rentBook(id, title, price);
-        }
+        // (Removed direct buy/rent actions to focus on Add to Cart flow)
 
         function addToCart(itemId, itemType, action) {
             fetch('/api/cart/add', {
