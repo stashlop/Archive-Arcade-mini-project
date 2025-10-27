@@ -1,94 +1,168 @@
+# Arcade & Archives — Final Project
 
---------------------------------------------------🚧 Work in Progress
+An end-to-end Flask app that blends a curated Books catalog, a Video Games shop with cart and demo checkout, a Cafe booking system, an Admin dashboard with revenue insights, and a Community page for email-based joining and admin updates. Modern glass UI with background videos and a unified header across pages.
 
-🎮 Archive & Arcade
+## ✨ Features
 
-🌟 Overview
-Archive & Arcade (A-A) is an engaging platform that combines retro gaming experiences with a digital archive system. It allows users to explore classic arcade-style games while also accessing a curated collection of digital content. The project aims to preserve digital history and provide interactive entertainment.
+- Accounts and access
+	- Signup, login, logout. Shared glass UI header across all pages.
+	- Admin detection: username `admin`, first user (ID=1), or usernames in env `ADMIN_USERS`.
+	- Header greets logged-in users by display name if set.
 
-🏛️ Features
-<img width="1909" height="905" alt="Screenshot 2025-09-27 210604" src="https://github.com/user-attachments/assets/c3a2722a-a98d-48a1-a321-8601664172c3" />
+- Books catalog (`/books`)
+	- Filter by category and search by title/author/description.
+	- Add to cart (Buy or Rent). Background video and glass cards.
 
-<img width="1909" height="905" alt="Screenshot 2025-09-27 210649" src="https://github.com/user-attachments/assets/96ce48f2-3081-4684-beb3-478b05ac69c7" />
+- Video games shop (`/video_games`)
+	- Tag-style categories, search, add to cart (Buy or Rent).
+	- Background video and glass cards UI.
 
-🎮 Arcade Mode – Play classic-inspired retro games
+- Cart, checkout, and history
+	- Cart: add/remove/clear, dynamic header count.
+	- Checkout (`/checkout`): choose Card/UPI/COD/Demo; persisted to `purchase_history` in `instance/games.db`.
+	- History (`/history`): view past purchases.
 
-📂 Archive Access – Browse and search through stored digital collections
+- Cafe system (`/cafe`)
+	- Availability rules: Sunday closed; Saturday members-only note.
+	- Slot listing with capacity and default durations; booking with overlap checks.
+	- View/cancel “My Bookings.” Frosted black glass visuals.
 
-🔑 User Accounts – Registration, login, and profile management
+- Admin dashboard (`/admin`)
+	- Totals, revenue by payment method, revenue by day (trend bars).
+	- Purchase list with method tags; cafe bookings; derived members ranking.
+	- CSV export at `/admin/revenue.csv`.
+	- Background videos play sequentially on admin: `books.mp4` → `videogames.mp4`.
 
-⭐ Achievements & Scores – Track progress and compete with others
+- Community page (`/community`)
+	- Join via email from Home; no login required. Stores `community_email` in session.
+	- Updates feed: admins can post; all members can read.
+	- Members panel: lists subscribers (emails masked for non-admins) with avatars.
+	- Profile: set display name and upload photo; mirrored to User account if logged in.
+	- Logged-in users can change account username.
 
-🛠️ Admin Dashboard – Manage games, archives, and users
+## 🧱 Tech Stack
 
-🛠️ Technology Stack
+- Python 3.12, Flask 3.x
+- Flask-SQLAlchemy for `users.db` (User model)
+- SQLite (raw) for `books.db`, `games.db` (purchase history), `cafe.db`, `community.db`
+- HTML + Jinja2 templates, CSS glass design, small vanilla JS
 
-Frontend: HTML5, CSS3, JavaScript
+## 📦 Setup
 
-Backend: Python (Flask)
+1) Clone and enter the project
 
-Database: SQLite / SQLAlchemy ORM
+```bash
+git clone https://github.com/stashlop/Archive-Arcade-mini-project.git
+cd Archive-Arcade-mini-project
+```
 
-UI Framework: Bootstrap
+2) Create a virtual environment and install deps
 
-Authentication: Flask-Login
-
-📦 Installation
-
-Clone the repository
-
-git clone https://github.com/stashlop/A-A.git
-cd A-A
-
-
-Create a virtual environment & activate
-
-python -m venv venv  
-source venv/bin/activate   # macOS/Linux  
-venv\Scripts\activate      # Windows
-
-
-Install dependencies
+```bash
+python3 -m venv .venv
+source .venv/bin/activate  # Linux/macOS
+# .venv\Scripts\activate  # Windows (PowerShell)
 
 pip install -r requirements.txt
+```
 
+3) Run the app (note: folder name contains an ampersand)
 
-Run the application
+```bash
+python A\&A/app.py  # Linux/macOS
+# python "A&A/app.py"  # Windows
+```
 
-flask run
+The app will start on http://127.0.0.1:5000 by default.
 
+## � Admin access (demo)
 
-App will be available at http://localhost:5000
+- Default admin seeded on first run:
+	- Username: `admin`
+	- Password: `admin123`
+- You can also set:
+	- `ADMIN_DEFAULT_PASSWORD` to change the default admin password.
+	- `ADMIN_USERS` as a comma-separated list of additional admin usernames.
+- Admin-only pages and actions require login; an “Admin” link appears in the header when admin.
 
-🗂️ Project Structure
-A-A/
- ├── static/        # CSS, JS, images
- ├── templates/     # HTML templates
- ├── app.py         # Main application entry point
- ├── models.py      # Database models
- ├── requirements.txt
- └── README.md
+## ⚙️ Environment variables (optional)
 
-🚀 Key Highlights
+- `SECRET_KEY`: Flask secret (default: `dev-secret-key-change-me`)
+- `ADMIN_DEFAULT_PASSWORD`: seed password for admin
+- `ADMIN_USERS`: comma-separated usernames to grant admin
+- Cafe settings:
+	- `CAFE_OPEN` (default `10:00`)
+	- `CAFE_CLOSE` (default `22:00`)
+	- `CAFE_SLOT_STEP_MIN` (default `60`)
+	- `CAFE_DEFAULT_DURATION` (default `60`)
+	- `CAFE_SLOT_CAPACITY` (default `10`)
 
-Gamification + Archiving in one platform
+## 🗄️ Data storage
 
-Responsive design for desktop & mobile
+All databases live under `instance/` and are created automatically on first use:
 
-Extensible architecture for adding new games or archive sections
+- `users.db` — Flask-SQLAlchemy User table (username, password_hash, display_name, photo_path)
+- `books.db` — books catalog (seeded on first run)
+- `games.db` — purchase_history (writes on checkout)
+- `cafe.db` — cafe_bookings
+- `community.db` — community_subscribers, community_messages
 
-🔮 Future Enhancements
+User-uploaded avatars are saved under `static/uploads/community/`.
 
-Multiplayer support
+## 🌐 Main pages
 
-Advanced search & tagging in archives
+- `/` — About (background video)
+- `/books` — Books library (filters + add to cart)
+- `/video_games` — Video games (filters + add to cart)
+- `/cart` — Cart
+- `/checkout` — Choose payment method & complete demo purchase
+- `/history` — Purchase history
+- `/cafe` — Book slots; view/cancel your bookings
+- `/admin` — Dashboard (admins)
+- `/community` — Community updates, profile, members; admins can post
 
-Mobile-first PWA support
+## 🔌 API endpoints (selected)
 
-Cloud-based database integration
+- Cart (`/api/cart/*`): `GET /`, `POST /add`, `POST /remove`, `POST /clear`, `POST /checkout`
+- Cafe:
+	- `GET /api/cafe/availability?date=YYYY-MM-DD`
+	- `GET /api/cafe/slots?date=YYYY-MM-DD`
+	- `POST /api/cafe/book` { date, time, partySize, duration, note }
+	- `GET /api/cafe/bookings` (mine)
+	- `DELETE /api/cafe/bookings/<id>`
+- Community:
+	- `POST /community/join` { email }
+	- `GET /api/community/messages` (list)
+	- `POST /api/community/messages` (admin-only)
+	- `GET /api/community/subscribers` (masked emails for non-admins)
+	- `POST /community/profile` (multipart: display_name, photo)
+	- `GET /api/community/me`
+	- `POST /account/username` { username } (logged-in users)
+- Admin:
+	- `GET /admin`
+	- `GET /admin/revenue.csv`
 
-## Admin access (demo)
+## ♻️ Resetting data
 
-- A default admin user is created on first run: username `admin`, password `admin123` (override via env `ADMIN_DEFAULT_PASSWORD`).
-- Alternatively, log in with any username listed in `ADMIN_USERS` (comma-separated), or the first registered user (ID 1) will be treated as admin.
-- Once logged in as admin, you'll see an Admin link in the header that opens `/admin`.
+To reset all local databases (they’ll recreate on next run):
+
+```bash
+rm -f instance/*.db
+```
+
+Optionally clear uploaded avatars:
+
+```bash
+rm -f A\&A/static/uploads/community/*  # Linux/macOS
+# del "A&A\static\uploads\community\*"  # Windows
+```
+
+## 🧭 Notes & tips
+
+- Background videos: `books.mp4`, `videogames.mp4`, and `about.mp4` are used across pages; admin page plays books → videogames in sequence.
+- The app self-heals missing DB columns (for safe upgrades) and seeds defaults on first run.
+- Because the app folder has an ampersand (`A&A`), prefer running with the direct Python path as shown above.
+
+## ✅ Status
+
+This is a complete, runnable demo showcasing catalog + commerce flow, bookings, admin dashboards, and community messaging with profiles, wrapped in a cohesive glass UI.
