@@ -540,20 +540,20 @@
                 </div>
                 
                 <div class="book-actions">
-                    <button class="btn btn-buy" onclick="purchaseBook({{ book.id }}, '{{ book.title }}', {{ book.buy_price }})">
+                    <button class="btn btn-buy" data-id="{{ book.id }}" data-title="{{ book.title }}" data-price="{{ '%.2f'|format(book.buy_price) }}" onclick="purchaseBookEl(this)">
                         Buy Now
                     </button>
-                    <button class="btn btn-rent" onclick="rentBook({{ book.id }}, '{{ book.title }}', {{ book.rent_price }})">
+                    <button class="btn btn-rent" data-id="{{ book.id }}" data-title="{{ book.title }}" data-price="{{ '%.2f'|format(book.rent_price) }}" onclick="rentBookEl(this)">
                         Rent (7 days)
                     </button>
                 </div>
                 <div class="book-actions" style="margin-top:.5rem;">
-                    <button class="btn btn-rent" style="background:linear-gradient(45deg,#8b5cf6,#6d28d9)" 
-                            onclick="addToCart({{ book.id }}, 'book', 'buy')">
+            <button class="btn btn-rent" style="background:linear-gradient(45deg,#8b5cf6,#6d28d9)" 
+                data-id="{{ book.id }}" data-type="book" data-action="buy" onclick="addToCartEl(this)">
                         Add to Cart (Buy)
                     </button>
-                    <button class="btn btn-secondary" style="background:#475569"
-                            onclick="addToCart({{ book.id }}, 'book', 'rent')">
+            <button class="btn btn-secondary" style="background:#475569"
+                data-id="{{ book.id }}" data-type="book" data-action="rent" onclick="addToCartEl(this)">
                         Add to Cart (Rent)
                     </button>
                 </div>
@@ -624,6 +624,20 @@
             }
         }
 
+        // Wrapper helpers to avoid inline JS args that confuse linters
+        function purchaseBookEl(el){
+            const id = Number(el.getAttribute('data-id'));
+            const title = el.getAttribute('data-title') || '';
+            const price = Number(el.getAttribute('data-price') || 0);
+            purchaseBook(id, title, price);
+        }
+        function rentBookEl(el){
+            const id = Number(el.getAttribute('data-id'));
+            const title = el.getAttribute('data-title') || '';
+            const price = Number(el.getAttribute('data-price') || 0);
+            rentBook(id, title, price);
+        }
+
         function addToCart(itemId, itemType, action) {
             fetch('/api/cart/add', {
                 method: 'POST',
@@ -638,6 +652,13 @@
                     alert(d.error || 'Failed to add to cart');
                 }
              }).catch(() => alert('Error adding to cart'));
+        }
+
+        function addToCartEl(el){
+            const id = Number(el.getAttribute('data-id'));
+            const type = el.getAttribute('data-type');
+            const action = el.getAttribute('data-action');
+            addToCart(id, type, action);
         }
     </script>
 </body>

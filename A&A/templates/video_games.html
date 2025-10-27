@@ -221,8 +221,8 @@
                         </div>
 
                         <div class="game-actions">
-                            <button class="btn btn-buy" onclick="addToCart({{ g.id }}, 'game', 'buy')">Add to Cart (Buy)</button>
-                            <button class="btn btn-rent" onclick="addToCart({{ g.id }}, 'game', 'rent')">Add to Cart (Rent)</button>
+                            <button class="btn btn-buy" data-id="{{ g.id }}" data-type="game" data-action="buy" onclick="addToCartEl(this)">Add to Cart (Buy)</button>
+                            <button class="btn btn-rent" data-id="{{ g.id }}" data-type="game" data-action="rent" onclick="addToCartEl(this)">Add to Cart (Rent)</button>
                         </div>
                     </div>
                 </div>
@@ -256,6 +256,13 @@
                 }
             })
             .catch(() => alert('Error adding to cart'));
+        }
+
+        function addToCartEl(el){
+            const id = Number(el.getAttribute('data-id'));
+            const type = el.getAttribute('data-type');
+            const action = el.getAttribute('data-action');
+            addToCart(id, type, action);
         }
     </script>
 </body>
