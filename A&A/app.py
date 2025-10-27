@@ -1,6 +1,6 @@
 import os
 import sqlite3
-from flask import Flask, render_template, request, session, redirect, url_for, flash
+from flask import Flask, render_template, request, session, redirect, url_for, flash, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from models import db, User
 
@@ -273,6 +273,51 @@ def create_app(config=None):
         if 'user' not in session and 'user_id' not in session:
             return redirect(url_for('login'))
         return render_template('cafe.html')
+
+    @app.route('/api/cafe/availability')
+    def cafe_availability():
+        """
+        Demo availability API for the Cafe.
+        Rules (demo):
+          - Sundays (weekday=6): Fully sold out (no access).
+          - Saturdays (weekday=5): Members-only esports event day (sold out for general, members allowed).
+          - Other days: Available.
+        Request: /api/cafe/availability?date=YYYY-MM-DD
+        """
+        if 'user' not in session and 'user_id' not in session:
+            return jsonify({'error': 'Authentication required'}), 401
+
+        dstr = (request.args.get('date') or '').strip()
+        from datetime import datetime as _dt
+        try:
+            day = _dt.strptime(dstr, '%Y-%m-%d').date()
+        except Exception:
+            return jsonify({'error': 'Invalid or missing date (use YYYY-MM-DD)'}), 400
+
+        wd = day.weekday()  # Monday=0 ... Sunday=6
+        if wd == 6:
+            return jsonify({
+                'date': dstr,
+                'status': 'sold_out',
+                'sold_out_general': True,
+                'members_allowed': False,
+                'note': 'Fully booked (closed to all reservations)'
+            })
+        if wd == 5:
+            return jsonify({
+                'date': dstr,
+                'status': 'members_only',
+                'sold_out_general': True,
+                'members_allowed': True,
+                'note': 'Members-only esports event day'
+            })
+        return jsonify({
+            'date': dstr,
+            'status': 'available',
+            'sold_out_general': False,
+            'members_allowed': True,
+            'note': 'Available for bookings'
+        })
 
     @app.route('/cart')
     def cart():
