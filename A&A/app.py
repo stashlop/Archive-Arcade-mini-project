@@ -319,6 +319,108 @@ def create_app(config=None):
             'note': 'Available for bookings'
         })
 
+    # ---- Cafe Booking (individual) ----
+    def _cafe_db_path():
+        os.makedirs(app.instance_path, exist_ok=True)
+        return os.path.join(app.instance_path, 'cafe.db')
+
+    def _ensure_cafe_tables(conn):
+        cur = conn.cursor()
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS cafe_bookings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                date TEXT NOT NULL,
+                time TEXT NOT NULL,
+                party_size INTEGER NOT NULL DEFAULT 1,
+                note TEXT,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.commit()
+
+    @app.route('/api/cafe/book', methods=['POST'])
+    def cafe_book():
+        if 'user' not in session and 'user_id' not in session:
+            return jsonify({'error': 'Authentication required'}), 401
+
+        data = request.get_json(silent=True) or {}
+        date = (data.get('date') or '').strip()
+        time = (data.get('time') or '').strip()
+        party_size = int(data.get('partySize') or 1)
+        note = (data.get('note') or '').strip()
+
+        if not date or not time:
+            return jsonify({'error': 'date and time are required'}), 400
+        if party_size < 1:
+            return jsonify({'error': 'partySize must be >= 1'}), 400
+
+        # Enforce availability rules
+        from datetime import datetime as _dt
+        try:
+            day = _dt.strptime(date, '%Y-%m-%d').date()
+        except Exception:
+            return jsonify({'error': 'Invalid date format (use YYYY-MM-DD)'}), 400
+
+        wd = day.weekday()
+        if wd == 6:
+            return jsonify({'error': 'Selected day is fully booked'}), 400
+        if wd == 5:
+            # Members-only day: in this demo, treat general users as non-members
+            return jsonify({'error': 'Members-only esports event day'}), 403
+
+        # Save booking
+        try:
+            dbp = _cafe_db_path()
+            conn = sqlite3.connect(dbp)
+            conn.row_factory = sqlite3.Row
+            _ensure_cafe_tables(conn)
+            cur = conn.cursor()
+            cur.execute(
+                """
+                INSERT INTO cafe_bookings (user_id, date, time, party_size, note, status, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    int(session.get('user_id') or 0),
+                    date,
+                    time,
+                    party_size,
+                    note,
+                    'confirmed',
+                    _dt.utcnow().isoformat()
+                )
+            )
+            conn.commit()
+            bid = cur.lastrowid
+            conn.close()
+            return jsonify({'success': True, 'booking_id': bid, 'status': 'confirmed'})
+        except Exception as e:
+            return jsonify({'error': f'Failed to save booking: {e}'}), 500
+
+    @app.route('/api/cafe/bookings', methods=['GET'])
+    def cafe_my_bookings():
+        if 'user' not in session and 'user_id' not in session:
+            return jsonify({'error': 'Authentication required'}), 401
+        try:
+            dbp = _cafe_db_path()
+            conn = sqlite3.connect(dbp)
+            conn.row_factory = sqlite3.Row
+            _ensure_cafe_tables(conn)
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT * FROM cafe_bookings WHERE user_id = ? ORDER BY date DESC, time DESC",
+                (int(session.get('user_id') or 0),)
+            )
+            rows = [dict(r) for r in cur.fetchall()]
+            conn.close()
+            return jsonify(rows)
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
     @app.route('/cart')
     def cart():
         if 'user' not in session and 'user_id' not in session:

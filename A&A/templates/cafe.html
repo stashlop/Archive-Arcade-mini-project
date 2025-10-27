@@ -65,6 +65,18 @@
                 </div>
                 <div id="status" class="small" style="margin-top:.75rem"></div>
             </div>
+            <div class="card" aria-live="polite">
+                <h3 style="margin-top:0">Book an Individual Session</h3>
+                <p class="small">Bookings are for one person by default. Choose your time slot. Availability rules apply.</p>
+                <div class="row" style="margin:.6rem 0 0 0;">
+                    <label for="time">Time:</label>
+                    <input id="time" class="input" type="time" value="18:00" />
+                    <label for="note">Note:</label>
+                    <input id="note" class="input" type="text" placeholder="Optional note"/>
+                    <button class="btn" onclick="bookCafe()">Reserve</button>
+                </div>
+                <div id="book-msg" class="small" style="margin-top:.75rem"></div>
+            </div>
             <div style="margin-top:1rem">
                 <a class="hero-btn" href="{{ url_for('home') }}">Back Home</a>
             </div>
@@ -110,6 +122,25 @@
                 out.innerHTML = html;
             }catch(e){
                 out.textContent = 'Failed to check availability.';
+            }
+        }
+        async function bookCafe(){
+            const date = document.getElementById('when')?.value;
+            const time = document.getElementById('time')?.value;
+            const note = document.getElementById('note')?.value || '';
+            const out = document.getElementById('book-msg');
+            if (!date || !time){ out.textContent = 'Please select date and time.'; return; }
+            out.textContent = 'Submitting...';
+            try{
+                const r = await fetch('/api/cafe/book', {
+                    method: 'POST', headers: { 'Content-Type':'application/json' },
+                    body: JSON.stringify({ date, time, partySize: 1, note })
+                });
+                const d = await r.json();
+                if (!r.ok){ out.textContent = d.error || 'Booking failed'; return; }
+                out.textContent = `✅ Booking confirmed (#${d.booking_id}) for ${date} at ${time}`;
+            }catch(e){
+                out.textContent = 'Booking error.';
             }
         }
         initDate();
