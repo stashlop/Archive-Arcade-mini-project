@@ -143,6 +143,18 @@ def create_app(config=None):
             if user and check_password_hash(user.password_hash, password):
                 session['user'] = username
                 session['user_id'] = user.id  # Add user_id to match auth.py
+                # If a community email is present from a prior join, link it to this account
+                try:
+                    cem = (session.get('community_email') or '').strip().lower()
+                    if cem:
+                        dbp = _community_db_path()
+                        conn = sqlite3.connect(dbp)
+                        _ensure_community_tables(conn)
+                        cur = conn.cursor()
+                        cur.execute("UPDATE community_subscribers SET user_id=? WHERE email=?", (int(user.id), cem))
+                        conn.commit(); conn.close()
+                except Exception:
+                    pass
                 return redirect(url_for('home'))
             else:
                 flash('Invalid username or password')
@@ -169,6 +181,18 @@ def create_app(config=None):
                 session.pop('user_id', None)
                 session['user'] = username
                 session['user_id'] = new_user.id
+                # Link existing community email (if any in session) to new account
+                try:
+                    cem = (session.get('community_email') or '').strip().lower()
+                    if cem:
+                        dbp = _community_db_path()
+                        conn = sqlite3.connect(dbp)
+                        _ensure_community_tables(conn)
+                        cur = conn.cursor()
+                        cur.execute("UPDATE community_subscribers SET user_id=? WHERE email=?", (int(new_user.id), cem))
+                        conn.commit(); conn.close()
+                except Exception:
+                    pass
                 return redirect(url_for('home'))
         return render_template('signup.html')
 
@@ -179,6 +203,7 @@ def create_app(config=None):
         session.pop('username', None)
         session.pop('user_id', None)
         session.pop('cart', None)
+        session.pop('community_email', None)
         return redirect(url_for('index'))
 
     @app.route('/books')
