@@ -281,6 +281,17 @@ def create_app(config=None):
             # Check if games table exists, if not create it
             cur = conn.cursor()
             cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='games'")
+            # Shared seed data
+            sample_games = [
+                ("Baldur's Gate 3", "Epic CRPG adventure with deep choices and co-op.", "RPG,Co-op", 59.99, 9.99, "images/games/Baldurs_Gate_3.jpeg"),
+                ("Alan Wake 2", "Psychological horror thriller with cinematic storytelling.", "Horror,Narrative", 49.99, 7.99, "images/games/Alan_Wake_2.jpeg"),
+                ("Cyberpunk 2077", "Open-world RPG in a neon-soaked metropolis.", "RPG,Open-World", 29.99, 6.99, "images/games/cyberpunk.jpeg"),
+                ("Red Dead Redemption 2", "Open-world western with cinematic storytelling.", "Open-World,Action", 39.99, 8.99, "images/games/red.jpeg"),
+                ("The Witcher 3", "Open-world RPG full of monsters and choices.", "RPG,Open-World", 29.99, 6.49, "images/games/witcher.jpeg"),
+                ("Disco Elysium", "A groundbreaking RPG focused on choice and investigation.", "Indie,RPG", 19.99, 4.49, "images/games/Disco.jpeg"),
+                ("Silent Hill 2 (Remake)", "Reimagined survival-horror classic.", "Horror,Survival", 39.99, 8.49, "images/games/hill.jpeg"),
+                ("God of War", "A mythic reimagining: father, son, and monsters.", "Action,Adventure", 29.99, 6.99, "images/games/god.jpeg")
+            ]
             if not cur.fetchone():
                 # Table doesn't exist, create and seed it
                 cur.execute("""
@@ -294,24 +305,20 @@ def create_app(config=None):
                         image TEXT
                     )
                 """)
-                
-                # Seed with sample data
-                sample_games = [
-                    ("Baldur's Gate 3", "Epic CRPG adventure with deep choices and co-op.", "RPG,Co-op", 59.99, 9.99, "images/games/Baldurs_Gate_3.jpeg"),
-                    ("Alan Wake 2", "Psychological horror thriller with cinematic storytelling.", "Horror,Narrative", 49.99, 7.99, "images/games/Alan_Wake_2.jpeg"),
-                    ("Cyberpunk 2077", "Open-world RPG in a neon-soaked metropolis.", "RPG,Open-World", 29.99, 6.99, "images/games/cyberpunk.jpeg"),
-                    ("Red Dead Redemption 2", "Open-world western with cinematic storytelling.", "Open-World,Action", 39.99, 8.99, "images/games/red.jpeg"),
-                    ("The Witcher 3", "Open-world RPG full of monsters and choices.", "RPG,Open-World", 29.99, 6.49, "images/games/witcher.jpeg"),
-                    ("Disco Elysium", "A groundbreaking RPG focused on choice and investigation.", "Indie,RPG", 19.99, 4.49, "images/games/Disco.jpeg"),
-                    ("Silent Hill 2 (Remake)", "Reimagined survival-horror classic.", "Horror,Survival", 39.99, 8.49, "images/games/hill.jpeg"),
-                    ("God of War", "A mythic reimagining: father, son, and monsters.", "Action,Adventure", 29.99, 6.99, "images/games/god.jpeg")
-                ]
-                
                 cur.executemany("""
                     INSERT INTO games (title, description, category, buy_price, rent_price, image) 
                     VALUES (?, ?, ?, ?, ?, ?)
                 """, sample_games)
                 conn.commit()
+            else:
+                # Table exists but may be empty (e.g., after a reset) -> seed if empty
+                cur.execute("SELECT COUNT(*) FROM games")
+                if int(cur.fetchone()[0] or 0) == 0:
+                    cur.executemany("""
+                        INSERT INTO games (title, description, category, buy_price, rent_price, image)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, sample_games)
+                    conn.commit()
                 
             # Optional filters
             category = request.args.get('category', '').strip()
@@ -363,6 +370,69 @@ def create_app(config=None):
             
         except Exception as e:
             return f"Database error: {str(e)}", 500
+
+    # Convenience redirect for old URL style
+    @app.route('/video-games')
+    def video_games_legacy_redirect():
+        return redirect(url_for('video_games'))
+
+    @app.route('/admin/seed/games')
+    def admin_seed_games():
+        # Admin-only helper to (re)seed the games catalog on demand
+        if not (session.get('user') or session.get('user_id')):
+            return redirect(url_for('login'))
+        if not _is_admin():
+            return "Forbidden: Admins only", 403
+        force = (request.args.get('force') or '').strip().lower() in ('1', 'true', 'yes')
+        try:
+            dbp = os.path.join(app.instance_path, 'games.db')
+            conn = sqlite3.connect(dbp)
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            # Ensure table exists
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS games (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    description TEXT,
+                    category TEXT,
+                    buy_price REAL DEFAULT 0,
+                    rent_price REAL DEFAULT 0,
+                    image TEXT
+                )
+            """)
+            # Check current count
+            cur.execute("SELECT COUNT(*) FROM games")
+            count = int(cur.fetchone()[0] or 0)
+            if count == 0 or force:
+                # Clear existing if forcing
+                if force:
+                    cur.execute("DELETE FROM games")
+                sample_games = [
+                    ("Baldur's Gate 3", "Epic CRPG adventure with deep choices and co-op.", "RPG,Co-op", 59.99, 9.99, "images/games/Baldurs_Gate_3.jpeg"),
+                    ("Alan Wake 2", "Psychological horror thriller with cinematic storytelling.", "Horror,Narrative", 49.99, 7.99, "images/games/Alan_Wake_2.jpeg"),
+                    ("Cyberpunk 2077", "Open-world RPG in a neon-soaked metropolis.", "RPG,Open-World", 29.99, 6.99, "images/games/cyberpunk.jpeg"),
+                    ("Red Dead Redemption 2", "Open-world western with cinematic storytelling.", "Open-World,Action", 39.99, 8.99, "images/games/red.jpeg"),
+                    ("The Witcher 3", "Open-world RPG full of monsters and choices.", "RPG,Open-World", 29.99, 6.49, "images/games/witcher.jpeg"),
+                    ("Disco Elysium", "A groundbreaking RPG focused on choice and investigation.", "Indie,RPG", 19.99, 4.49, "images/games/Disco.jpeg"),
+                    ("Silent Hill 2 (Remake)", "Reimagined survival-horror classic.", "Horror,Survival", 39.99, 8.49, "images/games/hill.jpeg"),
+                    ("God of War", "A mythic reimagining: father, son, and monsters.", "Action,Adventure", 29.99, 6.99, "images/games/god.jpeg")
+                ]
+                cur.executemany(
+                    """
+                    INSERT INTO games (title, description, category, buy_price, rent_price, image)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    sample_games
+                )
+                conn.commit()
+                msg = f"Seeded {len(sample_games)} games (force={force})."
+            else:
+                msg = f"Games table already has {count} entries. Use ?force=1 to replace."
+            conn.close()
+            return msg
+        except Exception as e:
+            return f"Seeding error: {e}", 500
 
     @app.route('/cafe')
     def cafe():
