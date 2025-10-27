@@ -63,11 +63,13 @@
           const total = Number(h.total || 0).toFixed(2);
           const buyer = h.buyer?.name || '';
           const email = h.buyer?.email || '';
+          const pay = h.paymentMethod || 'Demo';
           div.innerHTML = `
             <div class="top">
               <div>
                 <strong>Order #${h.id}</strong>
                 <span class="pill">${date}</span>
+                <span class="pill">${pay}</span>
               </div>
               <div><strong>$${total}</strong></div>
             </div>

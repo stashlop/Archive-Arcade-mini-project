@@ -122,6 +122,7 @@ def save_purchase():
         total_amount = float(data.get('total', 0))
         buyer_name = data.get('buyer', {}).get('name', '')
         buyer_email = data.get('buyer', {}).get('email', '')
+        payment_method = (data.get('paymentMethod') or 'Demo').strip()
         items_json = json.dumps(data.get('items', []))
         
         dbp = get_db_path()
@@ -134,9 +135,9 @@ def save_purchase():
         cur = conn.cursor()
         cur.execute(
             """INSERT INTO purchase_history 
-               (user_id, purchase_date, total_amount, buyer_name, buyer_email, items_json) 
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (user_id, purchase_date, total_amount, buyer_name, buyer_email, items_json)
+               (user_id, purchase_date, total_amount, buyer_name, buyer_email, payment_method, items_json) 
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, purchase_date, total_amount, buyer_name, buyer_email, payment_method, items_json)
         )
         conn.commit()
         purchase_id = cur.lastrowid
@@ -179,6 +180,7 @@ def get_purchase_history():
                 "id": row['id'],
                 "date": row['purchase_date'],
                 "total": row['total_amount'],
+                "paymentMethod": row['payment_method'] if 'payment_method' in row.keys() else None,
                 "buyer": {
                     "name": row['buyer_name'],
                     "email": row['buyer_email']
