@@ -96,6 +96,15 @@
             <button type="submit" style="padding:.5rem .9rem; border-radius:10px; border:none; cursor:pointer; background: linear-gradient(45deg, #22c55e, #16a34a); color:#fff;">Save</button>
           </form>
           <div id="profile-hint" style="display:none; color:#9fd; margin-top:.5rem;">Saved!</div>
+          {% if session.get('user') %}
+          <hr style="margin:1rem 0; border-color: rgba(255,255,255,.15);"/>
+          <h4>Account Username</h4>
+          <form id="username-form">
+            <input id="new_username" type="text" placeholder="New username" value="{{ session.get('user') }}" style="width:100%; margin:.3rem 0 0.5rem 0; padding:.5rem; border-radius:10px; border:1px solid rgba(255,255,255,.25); background:rgba(0,0,0,.3); color:#fff;" />
+            <button type="submit" style="padding:.5rem .9rem; border-radius:10px; border:none; cursor:pointer; background: linear-gradient(45deg, #667eea, #764ba2); color:#fff;">Change Username</button>
+          </form>
+          <div id="username-hint" style="display:none; color:#9fd; margin-top:.5rem;">Username updated!</div>
+          {% endif %}
           {% else %}
           <p style="color:#e5e7eb;">Join from Home with your email to set a display name and photo.</p>
           {% endif %}
@@ -224,6 +233,26 @@
       }catch(e){ /* ignore */ }
     }
     loadMembers();
+
+    // Username change (account)
+    const usernameForm = document.getElementById('username-form');
+    if (usernameForm) {
+      usernameForm.addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const val = (document.getElementById('new_username').value || '').trim();
+        if (!val) { alert('Enter a username'); return; }
+        try{
+          const r = await fetch('/account/username', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username: val }) });
+          const d = await r.json();
+          if (d && d.success) {
+            document.getElementById('username-hint').style.display = 'block';
+            setTimeout(()=>{ document.getElementById('username-hint').style.display='none'; }, 1000);
+          } else {
+            alert(d.error || 'Failed to update username');
+          }
+        } catch(e) { alert('Failed to update username'); }
+      });
+    }
   </script>
 </body>
 </html>

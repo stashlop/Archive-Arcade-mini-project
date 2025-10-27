@@ -858,6 +858,32 @@ def create_app(config=None):
         except Exception as e:
             return jsonify({'error': str(e)}), 500
 
+    @app.route('/account/username', methods=['POST'])
+    def account_change_username():
+        # Logged-in users can change their account username
+        uid = session.get('user_id')
+        if not uid:
+            return jsonify({'success': False, 'error': 'Login required'}), 401
+        data = request.get_json(silent=True) or {}
+        new_username = (data.get('username') or '').strip()
+        if not new_username or len(new_username) < 3:
+            return jsonify({'success': False, 'error': 'Username must be at least 3 characters'}), 400
+        try:
+            # Check availability
+            if User.query.filter_by(username=new_username).first():
+                return jsonify({'success': False, 'error': 'Username already taken'}), 409
+            user = User.query.get(int(uid))
+            if not user:
+                return jsonify({'success': False, 'error': 'User not found'}), 404
+            user.username = new_username
+            db.session.commit()
+            # Update session display name
+            session['user'] = new_username
+            return jsonify({'success': True})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'success': False, 'error': str(e)}), 500
+
     # ---------------- Blueprints ----------------
     app.register_blueprint(games_bp)
     app.register_blueprint(books_bp)
