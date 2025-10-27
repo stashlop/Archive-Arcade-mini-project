@@ -59,6 +59,36 @@ def create_app(config=None):
         items = session.get('cart', {}).get('items', [])
         return {'cart_count': sum(i.get('quantity', 1) for i in items)}
 
+    # ---------- Community (simple subscriber + updates) ----------
+    def _community_db_path():
+        os.makedirs(app.instance_path, exist_ok=True)
+        return os.path.join(app.instance_path, 'community.db')
+
+    def _ensure_community_tables(conn):
+        cur = conn.cursor()
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS community_subscribers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT UNIQUE NOT NULL,
+                joined_at TEXT NOT NULL
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS community_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                author TEXT,
+                content TEXT NOT NULL,
+                is_admin INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.commit()
+
     # ---------------- Routes ----------------
     @app.route('/')
     def index():
@@ -604,6 +634,85 @@ def create_app(config=None):
             return redirect(url_for('login'))
         # Render a page that loads history via API for current user
         return render_template('history.html')
+
+    # -------------- Community routes --------------
+    def _community_can_access():
+        return bool(session.get('user') or session.get('user_id') or session.get('community_email'))
+
+    @app.route('/community')
+    def community_page():
+        if not _community_can_access():
+            # allow discoverability but suggest joining
+            flash('Join the community with your email to access updates.')
+            return redirect(url_for('index'))
+        return render_template('community.html')
+
+    @app.route('/community/join', methods=['POST'])
+    def community_join():
+        # Open to all; users can join by email without logging in
+        email = (request.json.get('email') if request.is_json else request.form.get('email')) or ''
+        email = email.strip().lower()
+        if not email or '@' not in email or '.' not in email:
+            return jsonify({'success': False, 'error': 'Please enter a valid email'}), 400
+        from datetime import datetime as _dt
+        try:
+            dbp = _community_db_path()
+            conn = sqlite3.connect(dbp)
+            conn.row_factory = sqlite3.Row
+            _ensure_community_tables(conn)
+            cur = conn.cursor()
+            cur.execute("INSERT OR IGNORE INTO community_subscribers(email, joined_at) VALUES(?, ?)", (email, _dt.utcnow().isoformat()))
+            conn.commit()
+            conn.close()
+            session['community_email'] = email
+            return jsonify({'success': True})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @app.route('/api/community/messages', methods=['GET', 'POST'])
+    def community_messages():
+        if request.method == 'GET':
+            # Public feed, but page access controls viewing UI
+            try:
+                dbp = _community_db_path()
+                conn = sqlite3.connect(dbp)
+                conn.row_factory = sqlite3.Row
+                _ensure_community_tables(conn)
+                cur = conn.cursor()
+                cur.execute("SELECT id, author, content, is_admin, created_at FROM community_messages ORDER BY id DESC LIMIT 50")
+                rows = [dict(r) for r in cur.fetchall()]
+                conn.close()
+                return jsonify(rows)
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+        # POST -> admin-only create message
+        if not (session.get('user') or session.get('user_id')) or not _is_admin():
+            return jsonify({'error': 'Admins only'}), 403
+        data = request.get_json(silent=True) or {}
+        content = (data.get('content') or '').strip()
+        if not content:
+            return jsonify({'error': 'Message cannot be empty'}), 400
+        from datetime import datetime as _dt
+        try:
+            dbp = _community_db_path()
+            conn = sqlite3.connect(dbp)
+            conn.row_factory = sqlite3.Row
+            _ensure_community_tables(conn)
+            cur = conn.cursor()
+            author = session.get('user') or 'admin'
+            cur.execute(
+                """
+                INSERT INTO community_messages(user_id, author, content, is_admin, created_at)
+                VALUES(?, ?, ?, ?, ?)
+                """,
+                (int(session.get('user_id') or 0), author, content, 1, _dt.utcnow().isoformat())
+            )
+            conn.commit()
+            mid = cur.lastrowid
+            conn.close()
+            return jsonify({'success': True, 'id': mid})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
 
     # ---------------- Blueprints ----------------
     app.register_blueprint(games_bp)

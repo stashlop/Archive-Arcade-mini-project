@@ -22,6 +22,9 @@
     <div class="logo">A&A Store</div>
     <ul class="nav-links">
       <li><a href="{{ url_for('index') }}">Home</a></li>
+      {% if session.get('user') or session.get('user_id') or session.get('community_email') or is_admin %}
+      <li><a href="{{ url_for('community_page') }}">Community</a></li>
+      {% endif %}
       <li><a href="{{ url_for('books') }}">Books</a></li>
       <li><a href="{{ url_for('video_games') }}">Video Games</a></li>
       <li><a href="{{ url_for('cafe') }}">Cafe</a></li>

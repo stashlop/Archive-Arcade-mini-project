@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Community — A&A Store</title>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color:#fff; margin:0; }
+    /* Background (reuse gradient overlay for readability) */
+    .video-background { position:fixed; inset:0; z-index:-1; overflow:hidden; }
+    .video-background video { min-width:100%; min-height:100%; width:auto; height:auto; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); object-fit:cover; }
+    .video-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:-1; }
+    .video-loading { position:fixed; inset:0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); z-index:-2; }
+
+    .container { max-width: 1100px; margin: 2rem auto; padding: 0 1.25rem; position:relative; z-index:1; }
+    .page-header { text-align:center; margin: 1rem 0 2rem 0; }
+    .page-header h1 { font-size: 2.4rem; margin:0; background: linear-gradient(45deg, #fff, #f0f0f0); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .page-header p { color: #e5e7eb; opacity: .9; }
+
+    .panel { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 16px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); padding: 1rem; }
+    .layout { display: grid; grid-template-columns: 1.2fr .8fr; gap: 1rem; }
+
+    /* Feed */
+    .feed { max-height: 70vh; overflow:auto; display:flex; flex-direction:column; gap:.75rem; }
+    .msg { background: rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.15); border-radius:12px; padding:.8rem; }
+    .meta { display:flex; align-items:center; gap:.5rem; color:#cbd5e1; font-size:.85rem; margin-bottom:.25rem; }
+    .meta .pill { display:inline-block; padding:.1rem .5rem; border-radius:999px; font-size:.75rem; }
+    .pill-admin { background:#e6f0ff; color:#1f6feb; }
+    .pill-user { background:#f3f4f6; color:#374151; }
+    .content { white-space: pre-wrap; }
+
+    /* Admin post */
+    .post-box textarea { width:100%; min-height:120px; border-radius:10px; border:1px solid rgba(255,255,255,0.25); background: rgba(0,0,0,0.3); color:#fff; padding:.6rem; }
+    .post-box button { margin-top:.5rem; padding:.6rem .9rem; border-radius:10px; border:none; cursor:pointer; background: linear-gradient(45deg, #667eea, #764ba2); color:#fff; }
+
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="video-background">
+    <div class="video-loading"></div>
+    <video autoplay muted loop playsinline>
+      <source src="{{ url_for('static', filename='videogames.mp4') }}" type="video/mp4" />
+    </video>
+    <div class="video-overlay"></div>
+  </div>
+
+  {% include 'partials/header.html' %}
+
+  <div class="container">
+    <div class="page-header">
+      <h1>Community</h1>
+      <p>Welcome{% if session.get('community_email') %} — {{ session.get('community_email') }}{% elif session.get('user') %} — {{ session.get('user') }}{% endif %}. Stay tuned for admin updates.</p>
+    </div>
+
+    <div class="layout">
+      <section class="panel">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:.6rem;">
+          <h3 style="margin:0;">Latest Updates</h3>
+          <button id="refresh-btn" class="btn" style="padding:.45rem .7rem; border-radius:10px; border:1px solid rgba(255,255,255,.25); background:rgba(0,0,0,.3); color:#fff; cursor:pointer;">Refresh</button>
+        </div>
+        <div id="feed" class="feed" aria-live="polite"></div>
+      </section>
+
+      <aside class="panel">
+        {% if is_admin %}
+        <h3>Post an Update</h3>
+        <div class="post-box">
+          <textarea id="msg" placeholder="Share an update for everyone..."></textarea>
+          <button id="post-btn">Post</button>
+        </div>
+        <p style="color:#cbd5e1; font-size:.9rem; margin-top:.75rem;">Only admins can post updates. Everyone can view them.</p>
+        {% else %}
+        <h3>About</h3>
+        <p style="color:#e5e7eb;">You're in! You'll see admin updates here. You joined with {% if session.get('community_email') %}<strong>{{ session.get('community_email') }}</strong>{% else %}your account{% endif %}. No spam, just news.</p>
+        {% endif %}
+      </aside>
+    </div>
+  </div>
+
+  <script>
+    async function fetchMessages(){
+      try{
+        const r = await fetch('/api/community/messages');
+        const data = await r.json();
+        const feed = document.getElementById('feed');
+        feed.innerHTML = '';
+        data.forEach(m => {
+          const wrap = document.createElement('div');
+          wrap.className = 'msg';
+          wrap.innerHTML = `
+            <div class="meta">
+              <span class="pill ${m.is_admin ? 'pill-admin' : 'pill-user'}">${m.is_admin ? 'Admin' : 'User'}</span>
+              <strong>${m.author || (m.is_admin ? 'Admin' : 'User')}</strong>
+              <span>•</span>
+              <span>${(m.created_at || '').replace('T',' ').slice(0,19)}</span>
+            </div>
+            <div class="content">${escapeHtml(m.content || '')}</div>
+          `;
+          feed.appendChild(wrap);
+        });
+      }catch(e){
+        console.error(e);
+      }
+    }
+
+    function escapeHtml(s){
+      return (s||'')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    document.getElementById('refresh-btn').addEventListener('click', fetchMessages);
+
+    const postBtn = document.getElementById('post-btn');
+    if (postBtn) {
+      postBtn.addEventListener('click', async () => {
+        const ta = document.getElementById('msg');
+        const content = (ta.value || '').trim();
+        if (!content) { alert('Write something first.'); return; }
+        const r = await fetch('/api/community/messages', {
+          method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ content })
+        });
+        const d = await r.json();
+        if (d && d.success) { ta.value = ''; fetchMessages(); }
+        else { alert(d.error || 'Failed to post'); }
+      });
+    }
+
+    fetchMessages();
+  </script>
+</body>
+</html>

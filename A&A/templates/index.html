@@ -164,11 +164,12 @@
 
         <div class="card" style="margin-top:1rem">
           <strong>Stay in touch</strong>
-          <p style="color:var(--muted);margin:.6rem 0 0 0">Sign up for updates and event invites — demo site only.</p>
+          <p style="color:var(--muted);margin:.6rem 0 0 0">Sign up with your email to access the Community page and see admin updates.</p>
           <div style="display:flex;gap:.5rem;margin-top:.75rem">
-            <input type="email" placeholder="you@example.com" style="flex:1;padding:.45rem;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit">
-            <button class="cta-primary" style="padding:.45rem .6rem;border-radius:8px;border:none;cursor:pointer">Join</button>
+            <input id="join-email" type="email" placeholder="you@example.com" style="flex:1;padding:.45rem;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit">
+            <button id="join-email-btn" class="cta-primary" style="padding:.45rem .6rem;border-radius:8px;border:none;cursor:pointer">Join</button>
           </div>
+          <div id="join-hint" style="color:#9fd;display:none;margin-top:.5rem;">You're in! Redirecting…</div>
         </div>
       </aside>
     </main>
@@ -245,6 +246,28 @@
       if (el) el.textContent = n;
       document.querySelectorAll('[data-cart-count]').forEach(node => node.textContent = n);
     };
+
+    // Join community via email
+    const joinBtn = document.getElementById('join-email-btn');
+    if (joinBtn) {
+      joinBtn.addEventListener('click', async () => {
+        const input = document.getElementById('join-email');
+        const email = (input?.value || '').trim();
+        if (!email) { alert('Please enter your email'); return; }
+        try {
+          const res = await fetch('/community/join', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email }) });
+          const data = await res.json();
+          if (data.success) {
+            document.getElementById('join-hint').style.display = 'block';
+            setTimeout(() => { window.location.href = '/community'; }, 600);
+          } else {
+            alert(data.error || 'Failed to join');
+          }
+        } catch(e) {
+          alert('Failed to join');
+        }
+      });
+    }
     App.openCart = () => { document.getElementById('cart-modal').style.display='block'; };
   </script>
 </body>
