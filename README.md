@@ -86,3 +86,9 @@ Advanced search & tagging in archives
 Mobile-first PWA support
 
 Cloud-based database integration
+
+## Admin access (demo)
+
+- A default admin user is created on first run: username `admin`, password `admin123` (override via env `ADMIN_DEFAULT_PASSWORD`).
+- Alternatively, log in with any username listed in `ADMIN_USERS` (comma-separated), or the first registered user (ID 1) will be treated as admin.
+- Once logged in as admin, you'll see an Admin link in the header that opens `/admin`.

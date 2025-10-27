@@ -33,19 +33,7 @@
   </style>
 </head>
 <body>
-  <header class="header">
-    <nav class="nav">
-      <div class="logo">A&A Store</div>
-      <div>
-        <a href="{{ url_for('index') }}">Home</a>
-        <a href="{{ url_for('books') }}">Books</a>
-        <a href="{{ url_for('video_games') }}">Video Games</a>
-        <a href="{{ url_for('cafe') }}">Cafe</a>
-        <a href="{{ url_for('history_page') }}">History</a>
-        <a href="{{ url_for('logout') }}">Logout</a>
-      </div>
-    </nav>
-  </header>
+  {% include 'partials/header.html' %}
 
   <main class="container">
     <h1>Your Cart</h1>

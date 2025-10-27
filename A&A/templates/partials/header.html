@@ -1,19 +1,43 @@
-<header class="main-header">
-  <a class="logo-text" href="{{ url_for('index') }}">Arcade & Archives</a>
-  <nav class="main-nav">
-    <a href="{{ url_for('books') }}">Books</a>
-    <a href="{{ url_for('video_games') }}">Video Games</a>
-    <a href="{{ url_for('cafe') }}">Cafe</a>
-    {% if session.get('user') %}
-      <a href="{{ url_for('history_page') }}">History</a>
-    {% endif %}
-    
-    {% if session.get('user') %}
-      <span class="user-greeting">Hi, {{ session.get('username') or session.get('user') }}!</span>
-      <a href="{{ url_for('logout') }}">Sign Out</a>
-    {% else %}
-      <a href="{{ url_for('login') }}">Sign In</a>
-      <a href="{{ url_for('signup') }}">Sign Up</a>
-    {% endif %}
+<style>
+  /* Books-style glass header */
+  .header {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    padding: 1rem 2rem;
+    position: sticky; top: 0; z-index: 100; transition: all 0.3s ease;
+  }
+  .header:hover { background: rgba(255, 255, 255, 0.15); }
+  .nav { display:flex; justify-content:space-between; align-items:center; max-width:1200px; margin:0 auto; }
+  .logo { font-size:1.8rem; font-weight:bold; color:white; text-shadow:2px 2px 4px rgba(0,0,0,0.5); }
+  .nav-links { display:flex; gap:2rem; list-style:none; }
+  .nav-links a { text-decoration:none; color:white; font-weight:500; transition:all .3s; text-shadow:1px 1px 2px rgba(0,0,0,0.5); padding:.5rem 1rem; border-radius:8px; }
+  .nav-links a:hover { background:rgba(255,255,255,0.2); transform: translateY(-2px); }
+  @media (max-width: 768px) { .nav { flex-direction:column; gap:1rem; } .nav-links { gap:1rem; flex-wrap:wrap; justify-content:center; } }
+</style>
+
+<header class="header">
+  <nav class="nav">
+    <div class="logo">A&A Store</div>
+    <ul class="nav-links">
+      <li><a href="{{ url_for('index') }}">Home</a></li>
+      <li><a href="{{ url_for('books') }}">Books</a></li>
+      <li><a href="{{ url_for('video_games') }}">Video Games</a></li>
+      <li><a href="{{ url_for('cafe') }}">Cafe</a></li>
+      {% if session.get('user') %}
+      <li><a href="{{ url_for('history_page') }}">History</a></li>
+      {% endif %}
+      {% if is_admin %}
+      <li><a href="{{ url_for('admin_dashboard') }}">Dashboard</a></li>
+      {% endif %}
+      <li><a href="{{ url_for('cart') }}">Cart (<span data-cart-count>{{ cart_count or 0 }}</span>)</a></li>
+      {% if session.get('user') %}
+      <li><a href="{{ url_for('logout') }}">Logout</a></li>
+      {% else %}
+      <li><a href="{{ url_for('login') }}">Sign In</a></li>
+      <li><a href="{{ url_for('signup') }}">Sign Up</a></li>
+      {% endif %}
+    </ul>
   </nav>
 </header>

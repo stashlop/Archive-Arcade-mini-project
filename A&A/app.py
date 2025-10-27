@@ -1,6 +1,8 @@
 import os
 import sqlite3
-from flask import Flask, render_template, request, session, redirect, url_for, flash, jsonify
+import io
+import csv
+from flask import Flask, render_template, request, session, redirect, url_for, flash, jsonify, make_response
 from werkzeug.security import generate_password_hash, check_password_hash
 from models import db, User
 
@@ -39,6 +41,17 @@ def create_app(config=None):
         if not hasattr(app, 'db_initialized'):
             db.create_all()
             init_books_db()  # Initialize books database
+            # Ensure a default admin user exists for demo access
+            try:
+                from sqlalchemy.exc import SQLAlchemyError
+                if not User.query.filter_by(username='admin').first():
+                    admin_pw = os.getenv('ADMIN_DEFAULT_PASSWORD', 'admin123')
+                    admin_user = User(username='admin', password_hash=generate_password_hash(admin_pw))
+                    db.session.add(admin_user)
+                    db.session.commit()
+            except Exception:
+                # Do not block app startup if seeding fails
+                pass
             app.db_initialized = True
 
     @app.context_processor
@@ -336,11 +349,120 @@ def create_app(config=None):
                 party_size INTEGER NOT NULL DEFAULT 1,
                 note TEXT,
                 status TEXT NOT NULL,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                duration_minutes INTEGER NOT NULL DEFAULT 60,
+                canceled_at TEXT
             )
             """
         )
+        # Add missing columns safely
+        cur.execute("PRAGMA table_info(cafe_bookings)")
+        cols = {r[1] for r in cur.fetchall()}
+        if 'duration_minutes' not in cols:
+            cur.execute("ALTER TABLE cafe_bookings ADD COLUMN duration_minutes INTEGER NOT NULL DEFAULT 60")
+        if 'canceled_at' not in cols:
+            cur.execute("ALTER TABLE cafe_bookings ADD COLUMN canceled_at TEXT")
         conn.commit()
+        # Index to speed up overlap checks
+        try:
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_cafe_date_time_status ON cafe_bookings(date, time, status)")
+        except Exception:
+            pass
+        conn.commit()
+
+    def _slot_capacity():
+        try:
+            cap = int(os.getenv('CAFE_SLOT_CAPACITY', '10'))
+            return max(1, cap)
+        except Exception:
+            return 10
+
+    def _parse_time_to_min(tstr: str) -> int:
+        try:
+            h, m = (tstr or '00:00').split(':')
+            return int(h) * 60 + int(m)
+        except Exception:
+            return 0
+
+    def _minutes_to_time(m: int) -> str:
+        m = int(m) % (24*60)
+        return f"{m//60:02d}:{m%60:02d}"
+
+    def _overlaps(start_a: int, dur_a: int, start_b: int, dur_b: int) -> bool:
+        end_a = start_a + dur_a
+        end_b = start_b + dur_b
+        return start_a < end_b and start_b < end_a
+
+    def _sum_booked_seats(conn, date: str, start_min: int, duration_min: int) -> int:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT time, duration_minutes, party_size FROM cafe_bookings WHERE date=? AND status='confirmed'",
+            (date,)
+        )
+        total = 0
+        for t, d, p in cur.fetchall():
+            if _overlaps(start_min, duration_min, _parse_time_to_min(t), int(d or 60)):
+                total += int(p or 0)
+        return total
+
+    def _is_members_only(date_str: str) -> bool:
+        from datetime import datetime as _dt
+        try:
+            day = _dt.strptime(date_str, '%Y-%m-%d').date()
+        except Exception:
+            return False
+        wd = day.weekday()
+        return wd == 5  # Saturday
+
+    def _is_closed(date_str: str) -> bool:
+        from datetime import datetime as _dt
+        try:
+            day = _dt.strptime(date_str, '%Y-%m-%d').date()
+        except Exception:
+            return False
+        wd = day.weekday()
+        return wd == 6  # Sunday
+
+    @app.route('/api/cafe/slots')
+    def cafe_slots():
+        if 'user' not in session and 'user_id' not in session:
+            return jsonify({'error': 'Authentication required'}), 401
+        date = (request.args.get('date') or '').strip()
+        try:
+            _ = date and len(date) == 10
+        except Exception:
+            return jsonify({'error': 'Invalid or missing date'}), 400
+        # Closed or members-only days
+        if _is_closed(date):
+            return jsonify({'date': date, 'closed': True, 'members_only': False, 'slots': []})
+        if _is_members_only(date):
+            return jsonify({'date': date, 'closed': False, 'members_only': True, 'slots': []})
+
+        # Build slots from open/close times
+        open_time = os.getenv('CAFE_OPEN', '10:00')
+        close_time = os.getenv('CAFE_CLOSE', '22:00')
+        step_min = int(os.getenv('CAFE_SLOT_STEP_MIN', '60'))
+        default_dur = int(os.getenv('CAFE_DEFAULT_DURATION', '60'))
+        cap = _slot_capacity()
+        start_min = _parse_time_to_min(open_time)
+        end_min = _parse_time_to_min(close_time)
+        slots = []
+        try:
+            dbp = _cafe_db_path()
+            conn = sqlite3.connect(dbp)
+            conn.row_factory = sqlite3.Row
+            _ensure_cafe_tables(conn)
+            cur = conn.cursor()
+            m = start_min
+            while m + default_dur <= end_min:
+                used = _sum_booked_seats(conn, date, m, default_dur)
+                remain = max(0, cap - used)
+                slots.append({'time': _minutes_to_time(m), 'remaining': remain})
+                m += step_min
+            conn.close()
+        except Exception as e:
+            return jsonify({'error': f'Failed to load slots: {e}'}), 500
+        return jsonify({'date': date, 'closed': False, 'members_only': False, 'capacity': cap, 'duration': default_dur, 'slots': slots})
 
     @app.route('/api/cafe/book', methods=['POST'])
     def cafe_book():
@@ -351,38 +473,43 @@ def create_app(config=None):
         date = (data.get('date') or '').strip()
         time = (data.get('time') or '').strip()
         party_size = int(data.get('partySize') or 1)
+        duration_min = int(data.get('duration') or os.getenv('CAFE_DEFAULT_DURATION', '60'))
         note = (data.get('note') or '').strip()
 
         if not date or not time:
             return jsonify({'error': 'date and time are required'}), 400
         if party_size < 1:
             return jsonify({'error': 'partySize must be >= 1'}), 400
+        if duration_min < 30 or duration_min > 240:
+            return jsonify({'error': 'duration must be between 30 and 240 minutes'}), 400
 
-        # Enforce availability rules
-        from datetime import datetime as _dt
-        try:
-            day = _dt.strptime(date, '%Y-%m-%d').date()
-        except Exception:
-            return jsonify({'error': 'Invalid date format (use YYYY-MM-DD)'}), 400
-
-        wd = day.weekday()
-        if wd == 6:
+        # Enforce day rules
+        if _is_closed(date):
             return jsonify({'error': 'Selected day is fully booked'}), 400
-        if wd == 5:
-            # Members-only day: in this demo, treat general users as non-members
+        if _is_members_only(date):
             return jsonify({'error': 'Members-only esports event day'}), 403
 
-        # Save booking
+        # Capacity check + Save booking atomically
+        from datetime import datetime as _dt
         try:
             dbp = _cafe_db_path()
             conn = sqlite3.connect(dbp)
             conn.row_factory = sqlite3.Row
             _ensure_cafe_tables(conn)
             cur = conn.cursor()
+            # Check overlap usage
+            start_min = _parse_time_to_min(time)
+            used = _sum_booked_seats(conn, date, start_min, duration_min)
+            cap = _slot_capacity()
+            if used + party_size > cap:
+                remaining = max(0, cap - used)
+                conn.close()
+                return jsonify({'error': f'Not enough capacity in this slot', 'remaining': remaining, 'capacity': cap}), 409
+            # Save
             cur.execute(
                 """
-                INSERT INTO cafe_bookings (user_id, date, time, party_size, note, status, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO cafe_bookings (user_id, date, time, party_size, note, status, created_at, duration_minutes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     int(session.get('user_id') or 0),
@@ -391,7 +518,8 @@ def create_app(config=None):
                     party_size,
                     note,
                     'confirmed',
-                    _dt.utcnow().isoformat()
+                    _dt.utcnow().isoformat(),
+                    duration_min
                 )
             )
             conn.commit()
@@ -418,6 +546,39 @@ def create_app(config=None):
             rows = [dict(r) for r in cur.fetchall()]
             conn.close()
             return jsonify(rows)
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/cafe/bookings/<int:bid>', methods=['DELETE'])
+    def cafe_cancel_booking(bid: int):
+        if 'user' not in session and 'user_id' not in session:
+            return jsonify({'error': 'Authentication required'}), 401
+        try:
+            dbp = _cafe_db_path()
+            conn = sqlite3.connect(dbp)
+            conn.row_factory = sqlite3.Row
+            _ensure_cafe_tables(conn)
+            cur = conn.cursor()
+            # verify ownership and current status
+            cur.execute("SELECT id, user_id, status FROM cafe_bookings WHERE id=?", (bid,))
+            row = cur.fetchone()
+            if not row:
+                conn.close()
+                return jsonify({'error': 'Booking not found'}), 404
+            if int(row['user_id']) != int(session.get('user_id') or 0):
+                conn.close()
+                return jsonify({'error': 'Forbidden'}), 403
+            if row['status'] != 'confirmed':
+                conn.close()
+                return jsonify({'error': 'Booking is not active'}), 400
+            from datetime import datetime as _dt
+            cur.execute(
+                "UPDATE cafe_bookings SET status='canceled', canceled_at=? WHERE id=?",
+                (_dt.utcnow().isoformat(), bid)
+            )
+            conn.commit()
+            conn.close()
+            return jsonify({'success': True})
         except Exception as e:
             return jsonify({'error': str(e)}), 500
 
@@ -465,6 +626,149 @@ def create_app(config=None):
         if any(path.startswith(p) for p in RESTRICTED_PREFIXES):
             if not session.get('user') and not session.get('user_id'):
                 return redirect(url_for('login'))
+
+    @app.context_processor
+    def inject_admin_flag():
+        # Provide a convenience flag to templates for showing admin-only UI
+        try:
+            return { 'is_admin': _is_admin() }
+        except Exception:
+            return { 'is_admin': False }
+
+    # ---------------- Admin Dashboard ----------------
+    def _is_admin():
+        # Simple demo admin check: username 'admin' or user_id == 1, or env ADMIN_USERS contains username
+        uname = session.get('user') or session.get('username') or ''
+        if uname.lower() == 'admin':
+            return True
+        if (session.get('user_id') or 0) == 1:
+            return True
+        admin_users = os.getenv('ADMIN_USERS', '')
+        if admin_users:
+            allowed = {u.strip().lower() for u in admin_users.split(',') if u.strip()}
+            if uname.lower() in allowed:
+                return True
+        return False
+
+    @app.route('/admin')
+    def admin_dashboard():
+        if not (session.get('user') or session.get('user_id')):
+            return redirect(url_for('login'))
+        if not _is_admin():
+            return "Forbidden: Admins only", 403
+
+        # Purchases summary (games.db)
+        games_dbp = os.path.join(app.instance_path, 'games.db')
+        purchases = []
+        totals = { 'orders': 0, 'revenue': 0.0 }
+        method_totals = {}
+        daily_map = {}
+        try:
+            gconn = sqlite3.connect(games_dbp)
+            gconn.row_factory = sqlite3.Row
+            cur = gconn.cursor()
+            cur.execute("SELECT COUNT(*) as c, IFNULL(SUM(total_amount),0) as s FROM purchase_history")
+            row = cur.fetchone()
+            if row:
+                totals['orders'] = int(row['c'] or 0)
+                totals['revenue'] = float(row['s'] or 0)
+            cur.execute("SELECT * FROM purchase_history ORDER BY purchase_date DESC LIMIT 25")
+            purchases = [dict(r) for r in cur.fetchall()]
+            # Aggregate by method and by day from all rows (not only last 25)
+            cur.execute("SELECT purchase_date, total_amount, COALESCE(payment_method, 'Demo') as pm FROM purchase_history")
+            for r in cur.fetchall():
+                amt = float(r['total_amount'] or 0)
+                method = (r['pm'] or 'Demo').lower()
+                mt = method_totals.setdefault(method, {'orders': 0, 'revenue': 0.0})
+                mt['orders'] += 1
+                mt['revenue'] += amt
+                # derive date key
+                pdate = r['purchase_date'] or ''
+                if 'T' in pdate:
+                    dkey = pdate.split('T', 1)[0]
+                elif ' ' in pdate:
+                    dkey = pdate.split(' ', 1)[0]
+                else:
+                    dkey = pdate[:10]
+                dm = daily_map.setdefault(dkey, {'date': dkey, 'orders': 0, 'revenue': 0.0})
+                dm['orders'] += 1
+                dm['revenue'] += amt
+            gconn.close()
+        except Exception:
+            purchases = []
+
+        # Cafe bookings (cafe.db)
+        cafe_dbp = os.path.join(app.instance_path, 'cafe.db')
+        bookings = []
+        try:
+            cconn = sqlite3.connect(cafe_dbp)
+            cconn.row_factory = sqlite3.Row
+            cur = cconn.cursor()
+            cur.execute("SELECT * FROM cafe_bookings ORDER BY date DESC, time DESC")
+            bookings = [dict(r) for r in cur.fetchall()]
+            cconn.close()
+        except Exception:
+            bookings = []
+
+        # Derive simple members list from activity
+        members = {}
+        for p in purchases:
+            uid = int(p.get('user_id') or 0)
+            m = members.setdefault(uid, {'user_id': uid, 'orders': 0, 'spent': 0.0, 'bookings': 0})
+            m['orders'] += 1
+            try:
+                m['spent'] += float(p.get('total_amount') or 0)
+            except Exception:
+                pass
+        for b in bookings:
+            uid = int(b.get('user_id') or 0)
+            m = members.setdefault(uid, {'user_id': uid, 'orders': 0, 'spent': 0.0, 'bookings': 0})
+            m['bookings'] += 1
+        members_list = sorted(members.values(), key=lambda x: (-x['spent'], -x['orders']))[:50]
+
+        # Build daily revenue list (last 30 days)
+        daily_list = sorted(daily_map.values(), key=lambda x: x['date'], reverse=True)[:30]
+        daily_list = list(reversed(daily_list))  # chronological order for display
+        daily_max = max((d['revenue'] for d in daily_list), default=0.0)
+
+        return render_template(
+            'admin.html',
+            totals=totals,
+            purchases=purchases,
+            bookings=bookings,
+            members=members_list,
+            method_totals=method_totals,
+            daily_revenue=daily_list,
+            daily_max=daily_max
+        )
+
+    @app.route('/admin/revenue.csv')
+    def admin_revenue_csv():
+        if not (session.get('user') or session.get('user_id')):
+            return redirect(url_for('login'))
+        if not _is_admin():
+            return "Forbidden: Admins only", 403
+        games_dbp = os.path.join(app.instance_path, 'games.db')
+        rows = []
+        try:
+            gconn = sqlite3.connect(games_dbp)
+            gconn.row_factory = sqlite3.Row
+            cur = gconn.cursor()
+            cur.execute("SELECT id, user_id, purchase_date, total_amount, COALESCE(payment_method,'Demo') as payment_method FROM purchase_history ORDER BY purchase_date DESC")
+            rows = [dict(r) for r in cur.fetchall()]
+            gconn.close()
+        except Exception:
+            rows = []
+        # Build CSV
+        buf = io.StringIO()
+        writer = csv.DictWriter(buf, fieldnames=['id', 'user_id', 'purchase_date', 'total_amount', 'payment_method'])
+        writer.writeheader()
+        for r in rows:
+            writer.writerow(r)
+        resp = make_response(buf.getvalue())
+        resp.headers['Content-Type'] = 'text/csv'
+        resp.headers['Content-Disposition'] = 'attachment; filename=revenue.csv'
+        return resp
 
     return app
 

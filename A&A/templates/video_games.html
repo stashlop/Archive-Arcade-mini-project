@@ -152,20 +152,7 @@
         <div class="video-overlay"></div>
     </div>
 
-    <header class="header">
-        <nav class="nav">
-            <div class="logo">A&A Store</div>
-            <ul class="nav-links">
-                <li><a href="{{ url_for('index') }}">Home</a></li>
-                <li><a href="{{ url_for('books') }}">Books</a></li>
-                <li><a href="{{ url_for('video_games') }}">Video Games</a></li>
-                <li><a href="{{ url_for('cafe') }}">Cafe</a></li>
-                <li><a href="{{ url_for('history_page') }}">History</a></li>
-                <li><a href="{{ url_for('cart') }}">Cart (<span data-cart-count>{{ cart_count or 0 }}</span>)</a></li>
-                <li><a href="{{ url_for('logout') }}">Logout</a></li>
-            </ul>
-        </nav>
-    </header>
+    {% include 'partials/header.html' %}
 
     <div class="container">
         <div class="page-header">
