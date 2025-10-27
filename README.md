@@ -42,7 +42,8 @@ An end-to-end Flask app that blends a curated Books catalog, a Video Games shop 
 	- Members panel: lists subscribers (emails masked for non-admins) with avatars.
 	- Profile: set display name and upload photo; mirrored to User account if logged in.
 	- Logged-in users can change account username.
-![Uploading Screenshot 2025-10-26 185646.png…]()
+<img width="1465" height="894" alt="Screenshot 2025-10-27 223105" src="https://github.com/user-attachments/assets/5a3e0ad7-31b3-48d1-8ab0-420e4bfe92b3" />
+
 
 ## 🧱 Tech Stack
 
