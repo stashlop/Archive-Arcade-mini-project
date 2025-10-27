@@ -12,10 +12,12 @@ An end-to-end Flask app that blends a curated Books catalog, a Video Games shop 
 - Books catalog (`/books`)
 	- Filter by category and search by title/author/description.
 	- Add to cart (Buy or Rent). Background video and glass cards.
+<img width="1518" height="906" alt="Screenshot 2025-10-27 223130" src="https://github.com/user-attachments/assets/a04c7548-62b0-43ae-99fa-1e3ae5be1018" />
 
 - Video games shop (`/video_games`)
 	- Tag-style categories, search, add to cart (Buy or Rent).
 	- Background video and glass cards UI.
+<img width="1913" height="905" alt="Screenshot 2025-10-27 224003" src="https://github.com/user-attachments/assets/651a8453-1a3d-4bf4-87d8-bd8bea930283" />
 
 - Cart, checkout, and history
 	- Cart: add/remove/clear, dynamic header count.
@@ -26,6 +28,7 @@ An end-to-end Flask app that blends a curated Books catalog, a Video Games shop 
 	- Availability rules: Sunday closed; Saturday members-only note.
 	- Slot listing with capacity and default durations; booking with overlap checks.
 	- View/cancel “My Bookings.” Frosted black glass visuals.
+<img width="1910" height="906" alt="Screenshot 2025-10-27 224019" src="https://github.com/user-attachments/assets/e2e82065-9609-401f-9045-c50f5454ec83" />
 
 - Admin dashboard (`/admin`)
 	- Totals, revenue by payment method, revenue by day (trend bars).
@@ -39,6 +42,7 @@ An end-to-end Flask app that blends a curated Books catalog, a Video Games shop 
 	- Members panel: lists subscribers (emails masked for non-admins) with avatars.
 	- Profile: set display name and upload photo; mirrored to User account if logged in.
 	- Logged-in users can change account username.
+![Uploading Screenshot 2025-10-26 185646.png…]()
 
 ## 🧱 Tech Stack
 
