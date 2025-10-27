@@ -19,7 +19,12 @@
     .top { display:flex; align-items:center; justify-content:space-between; }
     .muted { opacity:.85; }
     .items { margin-top:.5rem; display:grid; gap:.3rem; }
-    .pill { font-size:.8rem; padding:.2rem .5rem; border-radius:999px; background: rgba(255,255,255,0.15); margin-left:.5rem; }
+  .pill { font-size:.8rem; padding:.2rem .5rem; border-radius:999px; background: rgba(255,255,255,0.15); margin-left:.5rem; }
+  /* Payment method color tags */
+  .pm-card { background: rgba(37,99,235,0.25); border:1px solid rgba(37,99,235,0.45); }
+  .pm-upi { background: rgba(22,163,74,0.25); border:1px solid rgba(22,163,74,0.45); }
+  .pm-cod { background: rgba(245,158,11,0.25); border:1px solid rgba(245,158,11,0.45); }
+  .pm-demo { background: rgba(107,114,128,0.25); border:1px solid rgba(107,114,128,0.45); }
     .empty { text-align:center; padding:2rem; opacity:.9; }
   </style>
 </head>
@@ -69,7 +74,7 @@
               <div>
                 <strong>Order #${h.id}</strong>
                 <span class="pill">${date}</span>
-                <span class="pill">${pay}</span>
+                ${paymentBadge(pay)}
               </div>
               <div><strong>$${total}</strong></div>
             </div>
@@ -83,6 +88,15 @@
       } catch (e) {
         alert('Failed to load history');
       }
+    }
+    function paymentBadge(method){
+      const m = (method || 'Demo').toString().trim();
+      const key = m.toLowerCase();
+      let icon = '🧪', cls = 'pm-demo', label = m || 'Demo';
+      if (key === 'card') { icon = '💳'; cls = 'pm-card'; label = 'Card'; }
+      else if (key === 'upi') { icon = '📱'; cls = 'pm-upi'; label = 'UPI'; }
+      else if (key === 'cod' || key === 'cash on delivery') { icon = '💵'; cls = 'pm-cod'; label = 'COD'; }
+      return `<span class="pill ${cls}">${icon} ${label}</span>`;
     }
     loadHistory();
   </script>
