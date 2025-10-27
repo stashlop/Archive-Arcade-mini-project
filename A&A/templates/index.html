@@ -105,17 +105,7 @@
   <div class="bg-overlay" aria-hidden="true"></div>
 
   <div class="main-container">
-    <header class="main-header" role="banner">
-      <a class="logo-text" href="{{ url_for('home') }}">Arcade & Archives</a>
-      <nav class="main-nav" role="navigation" aria-label="Main">
-        <a href="{{ url_for('books') }}">Books</a>
-        <a href="{{ url_for('video_games') }}">Video Games</a>
-        <a href="{{ url_for('cafe') }}">Cafe</a>
-  <a href="{{ url_for('history_page') }}" title="Purchase history">History</a>
-        <button id="header-view-cart" title="View cart">Cart (<span id="header-cart-count">0</span>)</button>
-        <button id="audio-toggle" aria-pressed="false" title="Toggle sound">🔈</button>
-      </nav>
-    </header>
+    {% include 'partials/header.html' %}
 
     <main class="hero" role="main" aria-labelledby="about-title">
       <section class="hero-left" aria-describedby="about-desc">
@@ -250,7 +240,11 @@
 
     // expose minimal hooks for shared cart/history scripts
     window.App = window.App || {};
-    App.updateHeaderCart = (n) => { const el = document.getElementById('header-cart-count'); if (el) el.textContent = n; };
+    App.updateHeaderCart = (n) => {
+      const el = document.getElementById('header-cart-count');
+      if (el) el.textContent = n;
+      document.querySelectorAll('[data-cart-count]').forEach(node => node.textContent = n);
+    };
     App.openCart = () => { document.getElementById('cart-modal').style.display='block'; };
   </script>
 </body>

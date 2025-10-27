@@ -1,0 +1,283 @@
+<!-- Background video: plays two clips sequentially -->
+<div class="video-background" aria-hidden="true">
+  <div class="video-loading"></div>
+  <video id="adminBgVideo" autoplay muted playsinline>
+    <source id="adminBgSource" src="{{ url_for('static', filename='books.mp4') }}" type="video/mp4">
+  </video>
+  <div class="video-overlay"></div>
+  
+</div>
+
+{% include 'partials/header.html' %}
+
+<style>
+  /* Full-bleed background video */
+  .video-background { position:fixed; inset:0; z-index:-1; overflow:hidden; }
+  .video-background video { min-width:100%; min-height:100%; width:auto; height:auto; position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); object-fit:cover; }
+  .video-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.35); z-index:-1; }
+  .video-loading { position:fixed; inset:0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); z-index:-2; }
+
+  /* Adopt a lightweight glass UI similar to video_games.html */
+  .admin-container { max-width:1200px; margin:2rem auto; padding:0 2rem; position:relative; z-index:1; }
+  .admin-header { text-align:center; margin-bottom:2rem; }
+  .admin-header h1 { font-size:3rem; margin-bottom:.5rem; background:linear-gradient(45deg, #667eea, #764ba2); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+  .admin-header p { color:#555; }
+  .glass-panel { background: rgba(255,255,255,0.85); border:1px solid rgba(0,0,0,0.08); border-radius:16px; box-shadow:0 8px 24px rgba(0,0,0,0.08); padding:1.25rem; margin:1rem 0; }
+  .stat-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:1rem; }
+  .stat-card { background: linear-gradient(135deg, #f8fafc, #eef2ff); border:1px solid #e5e7eb; border-radius:14px; padding:1rem; box-shadow:0 4px 14px rgba(0,0,0,0.08); }
+  .stat-label { font-size:.8rem; color:#64748b; text-transform:uppercase; letter-spacing:.04em; }
+  .stat-value { font-size:1.8rem; font-weight:700; color:#0f172a; }
+  .subtle { color:#64748b; font-size:.9rem; }
+  .pill { display:inline-block; padding:.2rem .6rem; border-radius:999px; font-size:.8rem; }
+  .pill-blue { background:#e6f0ff; color:#1f6feb; }
+  .pill-green { background:#e6ffed; color:#2ea043; }
+  .pill-amber { background:#fff4e5; color:#b45309; }
+  .pill-gray { background:#f3f4f6; color:#374151; }
+  .table-wrap { overflow:auto; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { padding:10px; border-bottom:1px solid #e5e7eb; text-align:left; }
+  th { color:#0f172a; }
+  td { color:#334155; }
+  .cards-row { display:flex; flex-wrap:wrap; gap:1rem; }
+  .mini-card { border:1px solid #e5e7eb; border-radius:12px; padding:12px; min-width:200px; background:#fff; }
+  .btn-link { text-decoration:none; border:1px solid #e5e7eb; padding:8px 10px; border-radius:8px; display:inline-block; color:#0f172a; }
+  .trend-rail { background:#f1f5f9; height:10px; border-radius:999px; width:100%; }
+  .trend-bar { background:#22c55e; height:10px; border-radius:999px; width:0; }
+  @media (max-width: 768px) {
+    .admin-header h1 { font-size:2.2rem; }
+  }
+</style>
+
+<div class="admin-container">
+  <div class="admin-header">
+    <h1>🛠️ Admin Dashboard</h1>
+    <p class="subtle">Admins only. Overview of purchases, cafe bookings, and member activity.</p>
+  </div>
+
+  <section class="glass-panel">
+    <h2>Totals</h2>
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-label">Total Orders</div>
+        <div class="stat-value">{{ totals.orders }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Total Revenue</div>
+        <div class="stat-value">₹{{ '%.2f'|format(totals.revenue) }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Avg Order Value</div>
+        <div class="stat-value">₹{{ '%.2f'|format((totals.revenue / totals.orders) if totals.orders else 0) }}</div>
+      </div>
+    </div>
+    <div style="margin-top:12px;">
+      <a href="{{ url_for('admin_revenue_csv') }}" class="btn-link">⬇️ Download revenue CSV</a>
+    </div>
+  </section>
+
+  <section class="glass-panel">
+    <h2>Revenue by Payment Method</h2>
+    {% if method_totals %}
+      <div class="cards-row">
+        {% for name, data in method_totals.items() %}
+        <div class="mini-card">
+          <div class="subtle" style="text-transform:uppercase;">{{ name }}</div>
+          <div style="font-size:1.3rem; font-weight:700;">₹{{ '%.2f'|format(data.revenue|float) }}</div>
+          <div class="subtle">Orders: {{ data.orders }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="subtle">No revenue by method yet.</p>
+    {% endif %}
+  </section>
+
+  <section class="glass-panel">
+    <h2>Revenue by Day (last 30)</h2>
+    {% if daily_revenue and daily_revenue|length > 0 %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th style="text-align:right;">Orders</th>
+            <th style="text-align:right;">Revenue</th>
+            <th>Trend</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in daily_revenue %}
+          {% set pct = (0 if daily_max == 0 else (d.revenue / daily_max) * 100.0) %}
+          <tr>
+            <td>{{ d.date }}</td>
+            <td style="text-align:right;">{{ d.orders }}</td>
+            <td style="text-align:right;">₹{{ '%.2f'|format(d.revenue|float) }}</td>
+            <td>
+              <div class="trend-rail">
+                <div class="trend-bar rev-bar" data-pct="{{ '%.0f'|format(pct) }}"></div>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      <p class="subtle">No daily revenue data yet.</p>
+    {% endif %}
+  </section>
+
+  <section class="glass-panel">
+    <h2>Recent Purchases</h2>
+    {% if purchases and purchases|length > 0 %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>User</th>
+            <th>Date</th>
+            <th style="text-align:right;">Amount</th>
+            <th>Method</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in purchases %}
+          <tr>
+            <td>{{ p.id }}</td>
+            <td>{{ p.user_id }}</td>
+            <td>{{ p.purchase_date }}</td>
+            <td style="text-align:right;">₹{{ '%.2f'|format(p.total_amount|float) }}</td>
+            <td>
+              {% set method = (p.payment_method or 'Demo')|lower %}
+              {% if method == 'card' %}<span class="pill pill-blue">💳 Card</span>
+              {% elif method == 'upi' %}<span class="pill pill-green">📱 UPI</span>
+              {% elif method == 'cod' %}<span class="pill pill-amber">💵 COD</span>
+              {% else %}<span class="pill pill-gray">🧪 Demo</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      <p class="subtle">No purchases found.</p>
+    {% endif %}
+  </section>
+
+  <section class="glass-panel">
+    <h2>Cafe Bookings</h2>
+    {% if bookings and bookings|length > 0 %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>User</th>
+            <th>Date</th>
+            <th>Time</th>
+            <th style="text-align:right;">Party</th>
+            <th>Status</th>
+            <th>Note</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in bookings %}
+          <tr>
+            <td>{{ b.id }}</td>
+            <td>{{ b.user_id }}</td>
+            <td>{{ b.date }}</td>
+            <td>{{ b.time }}</td>
+            <td style="text-align:right;">{{ b.party_size }}</td>
+            <td>{{ b.status }}</td>
+            <td>{{ b.note }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      <p class="subtle">No cafe bookings yet.</p>
+    {% endif %}
+  </section>
+
+  <section class="glass-panel">
+    <h2>Members</h2>
+    <p class="subtle">Derived from users who have purchases and/or cafe bookings.</p>
+    {% if members and members|length > 0 %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>User</th>
+            <th style="text-align:right;">Orders</th>
+            <th style="text-align:right;">Spent</th>
+            <th style="text-align:right;">Bookings</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in members %}
+          <tr>
+            <td>{{ m.user_id }}</td>
+            <td style="text-align:right;">{{ m.orders }}</td>
+            <td style="text-align:right;">₹{{ '%.2f'|format(m.spent|float) }}</td>
+            <td style="text-align:right;">{{ m.bookings }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      <p class="subtle">No member activity identified yet.</p>
+    {% endif %}
+  </section>
+  
+</div>
+
+<script>
+// Background video playlist: play two videos one after the other, looping
+document.addEventListener('DOMContentLoaded', function() {
+  const video = document.getElementById('adminBgVideo');
+  const source = document.getElementById('adminBgSource');
+  if (!video || !source) return;
+
+  const playlist = [
+    "{{ url_for('static', filename='books.mp4') }}",
+    "{{ url_for('static', filename='videogames.mp4') }}"
+  ];
+  let idx = 0;
+
+  function playNext() {
+    idx = (idx + 1) % playlist.length;
+    try {
+      source.src = playlist[idx];
+      video.load();
+      video.play().catch(() => {});
+    } catch (e) {
+      // no-op
+    }
+  }
+
+  video.addEventListener('ended', playNext);
+  video.addEventListener('error', playNext);
+
+  // Kick off playback; retry on first interaction if blocked
+  const tryPlay = () => video.play().catch(() => {});
+  tryPlay();
+  window.addEventListener('pointerdown', function once() {
+    tryPlay();
+    window.removeEventListener('pointerdown', once);
+  });
+});
+
+// set bar widths from data attributes after DOM loads
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.rev-bar[data-pct]').forEach(function(el){
+    var pct = parseFloat(el.getAttribute('data-pct') || '0');
+    if (!isNaN(pct) && pct >= 0) {
+      el.style.width = Math.min(100, Math.max(0, pct)) + '%';
+    }
+  });
+});
+</script>
