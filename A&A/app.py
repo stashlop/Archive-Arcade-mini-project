@@ -1193,4 +1193,6 @@ def create_app(config=None):
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(debug=True)
+    # Bind to the host/port expected by PaaS providers (e.g., Render)
+    # Default to 0.0.0.0 and PORT env var when available.
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)

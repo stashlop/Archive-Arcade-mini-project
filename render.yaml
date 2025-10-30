@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: arcade-archives
+    env: python
+    region: oregon # pick your nearest region
+    plan: free
+    buildCommand: python -m pip install -r requirements.txt
+    startCommand: python "A&A/app.py"
+    envVars:
+      - key: SECRET_KEY
+        value: dev-secret-key-change-me
+      - key: ADMIN_DEFAULT_PASSWORD
+        value: admin123
+      - key: ADMIN_USERS
+        value: admin
+      - key: CAFE_OPEN
+        value: "10:00"
+      - key: CAFE_CLOSE
+        value: "22:00"
+      - key: CAFE_SLOT_STEP_MIN
+        value: "60"
+      - key: CAFE_DEFAULT_DURATION
+        value: "60"
+      - key: CAFE_SLOT_CAPACITY
+        value: "10"
+    autoDeploy: true
+    healthCheckPath: /
