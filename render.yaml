@@ -23,5 +23,9 @@ services:
         value: "60"
       - key: CAFE_SLOT_CAPACITY
         value: "10"
+      - key: INSTANCE_PATH
+        # Set this to the mount path of your attached persistent disk on Render.
+        # Example: /mnt/instance
+        value: "/mnt/instance"
     autoDeploy: true
     healthCheckPath: /

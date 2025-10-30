@@ -32,6 +32,16 @@ except ImportError:
 
 def create_app(config=None):
     app = Flask(__name__, instance_relative_config=True)
+    # Allow overriding the instance path (useful when mounting a persistent
+    # volume on PaaS providers like Render). Set the env var INSTANCE_PATH to
+    # a writable persistent mount (e.g. /mnt/instance) so SQLite files survive
+    # across deploys.
+    inst_override = os.environ.get('INSTANCE_PATH')
+    if inst_override:
+        # normalize and ensure directory exists
+        inst_override = os.path.abspath(inst_override)
+        os.makedirs(inst_override, exist_ok=True)
+        app.instance_path = inst_override
     app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key-change-me")
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
