@@ -3,26 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Arcade and Archives</title>
+    <title>Arcade</title>
     <style>
         /* Basic body reset */
         body {
             margin: 0;
             font-family: sans-serif; /* Added for basic styling */
-            /* You might need to set a text color that is visible over your spline */
             color: white; 
         }
 
-        /* Styles for the full-screen background */
-        .spline-background {
-            position: fixed; /* Position it relative to the viewport */
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: -1; /* Place it behind all other content */
-        }
-        
         /* Ensure the header and main content appear on top of the background */
         .main-header, .hero-section {
             position: relative;
@@ -49,20 +38,13 @@
             height: 50px;
             margin-right: 10px;
         }
-        .logo-img, .logo-video {
+        .logo-img {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
             border-radius: 8px;
-        }
-        .logo-video {
-            opacity: 0;
-            transition: opacity 0.3s;
-        }
-        .logo-link:hover .logo-video {
-            opacity: 1;
         }
         .logo-text { font-size: 1.5rem; font-weight: bold; }
         .main-nav a { margin-left: 1.5rem; text-decoration: none; color: inherit; }
@@ -87,15 +69,11 @@
 </head>
 <body class="antialiased">
 
-    <div class="spline-background">
-        <iframe src='https://my.spline.design/updomi-5tiNZT76iShGB0qrIfkiKfOw/' frameborder='0' width='100%' height='100%'></iframe>
-    </div>
-    
     <header class="main-header">
         <a href="{{ url_for('home') }}" class="logo-link">
             <span class="logo-box">
             </span>
-            <span class="logo-text">Arcade and Archives</span>
+            <span class="logo-text">Arcade</span>
         </a>
         <nav class="main-nav">
             <a href="{{ url_for('home') }}" class="nav-link">Home</a>
@@ -114,14 +92,5 @@
         </div>
     </main>
 
-    <script>
-        // Play the video on hover (if you add a .logo-video element later)
-        const logoLink = document.querySelector('.logo-link');
-        const logoVideo = logoLink ? logoLink.querySelector('.logo-video') : null;
-        if (logoLink && logoVideo) {
-            logoLink.addEventListener('mouseenter', () => logoVideo.play());
-            logoLink.addEventListener('mouseleave', () => { logoVideo.currentTime = 0; });
-        }
-    </script>
 </body>
 </html>

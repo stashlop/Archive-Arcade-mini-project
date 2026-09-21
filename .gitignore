@@ -1,4 +1,8 @@
-node_modules/
-instance/json_store/
 .env
-.DS_Store
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+instance/
+arcade_*
+

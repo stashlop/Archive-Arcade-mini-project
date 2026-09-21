@@ -1,16 +1,3 @@
-#bg-video {
-    position: fixed;
-    right: 0;
-    bottom: 0;
-    min-width: 100vw;
-    min-height: 100vh;
-    width: auto;
-    height: auto;
-    z-index: -1;
-    object-fit: cover;
-    opacity: 0.6;
-}
-
 body {
     display: flex;
     align-items: center;
@@ -19,7 +6,7 @@ body {
     margin: 0;
     font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace;
     color: #fff;
-    background: none;
+    background: radial-gradient(circle at top, #1b2440 0%, #090b12 58%, #05060a 100%);
 }
 
 .auth-container {

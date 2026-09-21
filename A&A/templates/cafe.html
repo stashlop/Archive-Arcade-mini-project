@@ -1,227 +1,191 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cafe - Arcade and Archives</title>
-    <style>
-        body { margin: 0; font-family: sans-serif; color: white; }
-        .spline-background { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; }
-        .main-header, .hero-section { position: relative; z-index: 1; }
-        .main-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 2rem; }
-        .logo-link { display: flex; align-items: center; text-decoration: none; color: inherit; }
-        .logo-text { font-size: 1.5rem; font-weight: bold; }
-        .main-nav a { margin-left: 1.5rem; text-decoration: none; color: inherit; font-weight:600; }
-        .hero-section { display: flex; justify-content: center; align-items: center; min-height: 70vh; }
-        .hero-content { text-align: center; max-width: 980px; padding: 1rem; }
-        .hero-text h1 { font-size: 3rem; margin-bottom: 1rem; }
-        .hero-text p { font-size: 1.2rem; margin-bottom: 2rem; color: #e6e6e6; }
-        .hero-btn { padding: 1rem 2rem; margin: 0 0.5rem; text-decoration: none; color: white; border: 1px solid rgba(255,255,255,0.25); border-radius: 5px; background: rgba(0,0,0,0.25); }
-
-        /* Availability & tags */
-        .card {
-            background: rgba(0,0,0,0.45);
-            border: 1px solid rgba(255,255,255,0.12);
-            border-radius: 12px;
-            padding: 1rem;
-            margin-top: 1rem;
-            text-align:left;
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            box-shadow: 0 12px 30px rgba(0,0,0,0.35);
-        }
-        .row { display:flex; gap: .6rem; align-items: center; flex-wrap: wrap; justify-content:center; }
-        .badge { display:inline-block; padding:.25rem .5rem; border-radius:999px; border:1px solid rgba(255,255,255,0.25); margin-left:.4rem; font-weight:600; }
-        .ok { background: rgba(34,197,94,.25); border-color: rgba(34,197,94,.5); }
-        .members { background: rgba(168,85,247,.25); border-color: rgba(168,85,247,.5); }
-        .sold { background: rgba(239,68,68,.25); border-color: rgba(239,68,68,.5); }
-        .small { opacity:.9; font-size: .95rem; }
-        .input { background: rgba(0,0,0,.3); color:white; border:1px solid rgba(255,255,255,.25); border-radius:8px; padding:.5rem .6rem; }
-        .btn { background:#3b82f6; color:#fff; border:none; border-radius:8px; padding:.55rem .8rem; cursor:pointer; }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cafe - Arcade</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='arcade.css') }}" />
+  <style>
+    .cafe-grid { display: grid; gap: 1.2rem; }
+    .row { display:flex; gap:.6rem; align-items:center; flex-wrap: wrap; }
+    .badge.ok { background: rgba(34,197,94,.2); border:1px solid rgba(34,197,94,.5); }
+    .badge.members { background: rgba(245,158,11,.2); border:1px solid rgba(245,158,11,.5); }
+    .badge.sold { background: rgba(239,68,68,.2); border:1px solid rgba(239,68,68,.5); }
+  </style>
 </head>
 <body class="antialiased">
+  {% include 'partials/header.html' %}
 
-    <div class="spline-background">
-        <iframe src="https://my.spline.design/updomi-5tiNZT76iShGB0qrIfkiKfOw/" frameborder="0" width="100%" height="100%"></iframe>
-    </div>
+  <main class="page-shell">
+    <header class="page-header">
+      <p class="badge">Cafe & Lounge</p>
+      <h1 class="page-title">Book a Session</h1>
+      <p class="page-subtitle">Reserve tables, track bookings, and check daily availability.</p>
+    </header>
 
-    {% include 'partials/header.html' %}
-
-    <main class="hero-section">
-        <div class="hero-content">
-            <div class="hero-text">
-                <h1>Cafe & Lounge</h1>
-                <p>Recharge with seasonal brews. Members can book play sessions and host esports events in our lounge.</p>
-            </div>
-            <div class="card" aria-live="polite">
-                <h3 style="margin-top:0">Check Availability & Slots</h3>
-                <p class="small">Saturdays are reserved for members-only esports events. Sundays are fully booked. Other days are open to all.</p>
-                <div class="row" style="margin:.6rem 0 0 0;">
-                    <label for="when">Date:</label>
-                    <input id="when" class="input" type="date" />
-                    <button class="btn" onclick="checkCafe()">Check</button>
-                    <button class="btn" onclick="loadSlots()">Load Slots</button>
-                </div>
-                <div id="status" class="small" style="margin-top:.75rem"></div>
-                <div id="slots" class="small" style="margin-top:.75rem"></div>
-            </div>
-            <div class="card" aria-live="polite">
-                <h3 style="margin-top:0">Book a Slot</h3>
-                <p class="small">Select a time and party size. Default duration is 60 minutes.</p>
-                <div class="row" style="margin:.6rem 0 0 0;">
-                    <label for="slot-time">Time:</label>
-                    <select id="slot-time" class="input"></select>
-                    <label for="party">Party:</label>
-                    <input id="party" class="input" type="number" min="1" max="10" value="1" style="width:80px"/>
-                    <label for="duration">Duration:</label>
-                    <select id="duration" class="input">
-                        <option value="60">60 min</option>
-                        <option value="90">90 min</option>
-                        <option value="120">120 min</option>
-                    </select>
-                </div>
-                <div class="row" style="margin:.6rem 0 0 0;">
-                    <label for="note">Note:</label>
-                    <input id="note" class="input" type="text" placeholder="Optional note"/>
-                    <button class="btn" onclick="bookCafe()">Reserve</button>
-                </div>
-                <div id="book-msg" class="small" style="margin-top:.75rem"></div>
-            </div>
-            <div class="card" aria-live="polite">
-                <h3 style="margin-top:0">Your Bookings</h3>
-                <div id="my-bookings" class="small">Loading…</div>
-            </div>
-            <div style="margin-top:1rem">
-                <a class="hero-btn" href="{{ url_for('home') }}">Back Home</a>
-            </div>
+    <section class="cafe-grid">
+      <div class="section-card">
+        <h2>Availability & Slots</h2>
+        <p class="page-subtitle">Saturdays are members-only esports events. Sundays are closed.</p>
+        <div class="row" style="margin-top: .8rem;">
+          <label for="when">Date</label>
+          <input id="when" type="date" />
+          <button class="btn btn-primary" onclick="checkCafe()">Check</button>
+          <button class="btn btn-ghost" onclick="loadSlots()">Load Slots</button>
         </div>
-    </main>
+        <div id="status" class="page-subtitle" style="margin-top: .8rem;"></div>
+        <div id="slots" class="page-subtitle" style="margin-top: .8rem;"></div>
+      </div>
 
-    <script>
-        const logoLink = document.querySelector('.logo-link');
-        const logoVideo = logoLink ? logoLink.querySelector('.logo-video') : null;
-        if (logoLink && logoVideo) {
-            logoLink.addEventListener('mouseenter', () => logoVideo.play());
-            logoLink.addEventListener('mouseleave', () => { logoVideo.currentTime = 0; });
-        }
+      <div class="section-card">
+        <h2>Book a Slot</h2>
+        <p class="page-subtitle">Choose time, party size, and duration.</p>
+        <div class="row" style="margin-top: .8rem;">
+          <label for="slot-time">Time</label>
+          <select id="slot-time"></select>
+          <label for="party">Party</label>
+          <input id="party" type="number" min="1" max="10" value="1" style="width:80px" />
+          <label for="duration">Duration</label>
+          <select id="duration">
+            <option value="60">60 min</option>
+            <option value="90">90 min</option>
+            <option value="120">120 min</option>
+          </select>
+        </div>
+        <div class="row" style="margin-top: .8rem;">
+          <label for="note">Note</label>
+          <input id="note" type="text" placeholder="Optional note" />
+          <button class="btn btn-accent" onclick="bookCafe()">Reserve</button>
+        </div>
+        <div id="book-msg" class="page-subtitle" style="margin-top: .8rem;"></div>
+      </div>
 
-        // Availability checker
-        function fmt(d){
-            const z = n => n.toString().padStart(2,'0');
-            return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}`;
-        }
-        function initDate(){
-            const input = document.getElementById('when');
-            if (input && !input.value) input.value = fmt(new Date());
-        }
-        async function checkCafe(){
-            const input = document.getElementById('when');
-            const out = document.getElementById('status');
-            if (!input || !input.value) { out.textContent = 'Select a date first.'; return; }
-            out.textContent = 'Checking...';
-            try{
-                const r = await fetch(`/api/cafe/availability?date=${encodeURIComponent(input.value)}`);
-                const d = await r.json();
-                if (!r.ok){ out.textContent = d.error || 'Error'; return; }
-                let html = '';
-                if (d.status === 'available') {
-                    html = `✅ Available <span class="badge ok">All welcome</span>`;
-                } else if (d.status === 'members_only') {
-                    html = `🕹️ Members-only on this day <span class="badge members">Esports events</span>`;
-                } else if (d.status === 'sold_out') {
-                    html = `⛔ Fully booked <span class="badge sold">Sold out</span>`;
-                } else {
-                    html = d.note || 'Unknown status';
-                }
-                out.innerHTML = html;
-            }catch(e){
-                out.textContent = 'Failed to check availability.';
-            }
-        }
-        async function loadSlots(){
-            const date = document.getElementById('when')?.value;
-            const out = document.getElementById('slots');
-            const timeSel = document.getElementById('slot-time');
-            if (!date){ out.textContent = 'Select a date first.'; return; }
-            out.textContent = 'Loading slots…';
-            timeSel.innerHTML = '';
-            try {
-                const r = await fetch(`/api/cafe/slots?date=${encodeURIComponent(date)}`);
-                const d = await r.json();
-                if (!r.ok){ out.textContent = d.error || 'Failed to load slots'; return; }
-                if (d.closed){ out.textContent = '⛔ Closed on this day.'; return; }
-                if (d.members_only){ out.textContent = '🕹️ Members-only esports event day.'; return; }
-                if (!d.slots || !d.slots.length){ out.textContent = 'No slots available.'; return; }
-                out.innerHTML = `Capacity per slot: ${d.capacity}. Default duration: ${d.duration} minutes.`;
-                d.slots.forEach(s => {
-                    const opt = document.createElement('option');
-                    opt.value = s.time; opt.textContent = `${s.time} — ${s.remaining} seats left`;
-                    timeSel.appendChild(opt);
-                });
-            } catch(e){
-                out.textContent = 'Failed to load slots.';
-            }
-        }
+      <div class="section-card">
+        <h2>Your Bookings</h2>
+        <div id="my-bookings" class="page-subtitle">Loading...</div>
+      </div>
+    </section>
+  </main>
 
-        async function refreshMyBookings(){
-            const box = document.getElementById('my-bookings');
-            try{
-                const r = await fetch('/api/cafe/bookings');
-                const d = await r.json();
-                if (!r.ok) { box.textContent = d.error || 'Failed to load'; return; }
-                if (!d.length){ box.textContent = 'No bookings yet.'; return; }
-                box.innerHTML = '';
-                d.forEach(b => {
-                    const row = document.createElement('div');
-                    row.style.display = 'flex'; row.style.gap = '.5rem'; row.style.alignItems = 'center'; row.style.justifyContent = 'space-between';
-                    row.innerHTML = `<span>#${b.id} — ${b.date} ${b.time} · party ${b.party_size} · ${b.status}</span>`;
-                    if (b.status === 'confirmed'){
-                        const btn = document.createElement('button'); btn.textContent = 'Cancel'; btn.className = 'btn';
-                        btn.onclick = async ()=>{
-                            if (!confirm('Cancel this booking?')) return;
-                            const rr = await fetch(`/api/cafe/bookings/${b.id}`, { method:'DELETE' });
-                            const dd = await rr.json();
-                            if (!rr.ok){ alert(dd.error || 'Cancel failed'); return; }
-                            refreshMyBookings(); loadSlots();
-                        };
-                        row.appendChild(btn);
-                    }
-                    box.appendChild(row);
-                });
-            }catch(e){
-                box.textContent = 'Failed to load';
-            }
+  <script>
+    function fmt(d){
+      const z = n => n.toString().padStart(2,'0');
+      return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}`;
+    }
+    function initDate(){
+      const input = document.getElementById('when');
+      if (input && !input.value) input.value = fmt(new Date());
+    }
+    async function checkCafe(){
+      const input = document.getElementById('when');
+      const out = document.getElementById('status');
+      if (!input || !input.value) { out.textContent = 'Select a date first.'; return; }
+      out.textContent = 'Checking...';
+      try{
+        const r = await fetch(`/api/cafe/availability?date=${encodeURIComponent(input.value)}`);
+        const d = await r.json();
+        if (!r.ok){ out.textContent = d.error || 'Error'; return; }
+        let html = '';
+        if (d.status === 'available') {
+          html = `Available <span class="badge ok">All welcome</span>`;
+        } else if (d.status === 'members_only') {
+          html = `Members-only <span class="badge members">Esports day</span>`;
+        } else if (d.status === 'sold_out') {
+          html = `Fully booked <span class="badge sold">Closed</span>`;
+        } else {
+          html = d.note || 'Unknown status';
         }
+        out.innerHTML = html;
+      }catch(e){
+        out.textContent = 'Failed to check availability.';
+      }
+    }
+    async function loadSlots(){
+      const date = document.getElementById('when')?.value;
+      const out = document.getElementById('slots');
+      const timeSel = document.getElementById('slot-time');
+      if (!date){ out.textContent = 'Select a date first.'; return; }
+      out.textContent = 'Loading slots...';
+      timeSel.innerHTML = '';
+      try {
+        const r = await fetch(`/api/cafe/slots?date=${encodeURIComponent(date)}`);
+        const d = await r.json();
+        if (!r.ok){ out.textContent = d.error || 'Failed to load slots'; return; }
+        if (d.closed){ out.textContent = 'Closed on this day.'; return; }
+        if (d.members_only){ out.textContent = 'Members-only esports event day.'; return; }
+        if (!d.slots || !d.slots.length){ out.textContent = 'No slots available.'; return; }
+        out.innerHTML = `Capacity per slot: ${d.capacity}. Default duration: ${d.duration} minutes.`;
+        d.slots.forEach(s => {
+          const opt = document.createElement('option');
+          opt.value = s.time; opt.textContent = `${s.time} - ${s.remaining} seats left`;
+          timeSel.appendChild(opt);
+        });
+      } catch(e){
+        out.textContent = 'Failed to load slots.';
+      }
+    }
 
-        async function bookCafe(){
-            const date = document.getElementById('when')?.value;
-            const time = document.getElementById('slot-time')?.value;
-            const party = Number(document.getElementById('party')?.value || '1');
-            const duration = Number(document.getElementById('duration')?.value || '60');
-            const note = document.getElementById('note')?.value || '';
-            const out = document.getElementById('book-msg');
-            if (!date || !time){ out.textContent = 'Please select date and time.'; return; }
-            out.textContent = 'Submitting...';
-            try{
-                const r = await fetch('/api/cafe/book', {
-                    method: 'POST', headers: { 'Content-Type':'application/json' },
-                    body: JSON.stringify({ date, time, partySize: party, duration, note })
-                });
-                const d = await r.json();
-                if (!r.ok){ out.textContent = (d.error || 'Booking failed') + (d.remaining !== undefined ? ` (remaining: ${d.remaining})` : ''); return; }
-                out.textContent = `✅ Booking confirmed (#${d.booking_id}) for ${date} at ${time}`;
-                refreshMyBookings(); loadSlots();
-            }catch(e){
-                out.textContent = 'Booking error.';
-            }
-        }
-        function init(){
-            initDate();
-            loadSlots();
-            refreshMyBookings();
-        }
-        init();
-    </script>
+    async function refreshMyBookings(){
+      const box = document.getElementById('my-bookings');
+      try{
+        const r = await fetch('/api/cafe/bookings');
+        const d = await r.json();
+        if (!r.ok) { box.textContent = d.error || 'Failed to load'; return; }
+        if (!d.length){ box.textContent = 'No bookings yet.'; return; }
+        box.innerHTML = '';
+        d.forEach(b => {
+          const row = document.createElement('div');
+          row.style.display = 'flex'; row.style.gap = '.5rem'; row.style.alignItems = 'center'; row.style.justifyContent = 'space-between';
+          row.innerHTML = `<span>#${b.id} - ${b.date} ${b.time} - party ${b.party_size} - ${b.status}</span>`;
+          if (b.status === 'confirmed'){
+            const btn = document.createElement('button'); btn.textContent = 'Cancel'; btn.className = 'btn btn-ghost';
+            btn.onclick = async ()=>{
+              if (!confirm('Cancel this booking?')) return;
+              const rr = await fetch(`/api/cafe/bookings/${b.id}`, { method:'DELETE' });
+              const dd = await rr.json();
+              if (!rr.ok){ alert(dd.error || 'Cancel failed'); return; }
+              refreshMyBookings(); loadSlots();
+            };
+            row.appendChild(btn);
+          }
+          box.appendChild(row);
+        });
+      }catch(e){
+        box.textContent = 'Failed to load';
+      }
+    }
+
+    async function bookCafe(){
+      const date = document.getElementById('when')?.value;
+      const time = document.getElementById('slot-time')?.value;
+      const party = Number(document.getElementById('party')?.value || '1');
+      const duration = Number(document.getElementById('duration')?.value || '60');
+      const note = document.getElementById('note')?.value || '';
+      const out = document.getElementById('book-msg');
+      if (!date || !time){ out.textContent = 'Please select date and time.'; return; }
+      out.textContent = 'Submitting...';
+      try{
+        const r = await fetch('/api/cafe/book', {
+          method: 'POST', headers: { 'Content-Type':'application/json' },
+          body: JSON.stringify({ date, time, partySize: party, duration, note })
+        });
+        const d = await r.json();
+        if (!r.ok){ out.textContent = (d.error || 'Booking failed') + (d.remaining !== undefined ? ` (remaining: ${d.remaining})` : ''); return; }
+        out.textContent = `Booking confirmed (#${d.booking_id}) for ${date} at ${time}`;
+        refreshMyBookings(); loadSlots();
+      }catch(e){
+        out.textContent = 'Booking error.';
+      }
+    }
+    function init(){
+      initDate();
+      loadSlots();
+      refreshMyBookings();
+    }
+    init();
+  </script>
 </body>
 </html>

@@ -1,584 +1,114 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Books Library - A&A Store</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            min-height: 100vh;
-            color: #333;
-            overflow-x: hidden;
-        }
-
-        /* Background Video Styles */
-        .video-background {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: -1;
-            overflow: hidden;
-        }
-
-        .video-background video {
-            min-width: 100%;
-            min-height: 100%;
-            width: auto;
-            height: auto;
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            object-fit: cover;
-        }
-
-        .video-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.4);
-            z-index: -1;
-        }
-
-        /* Transparent Header */
-        .header {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-            padding: 1rem 2rem;
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            transition: all 0.3s ease;
-        }
-
-        .header:hover {
-            background: rgba(255, 255, 255, 0.15);
-        }
-
-        .nav {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        .logo {
-            font-size: 1.8rem;
-            font-weight: bold;
-            color: white;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-        }
-
-        .nav-links {
-            display: flex;
-            gap: 2rem;
-            list-style: none;
-        }
-
-        .nav-links a {
-            text-decoration: none;
-            color: white;
-            font-weight: 500;
-            transition: all 0.3s;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
-            padding: 0.5rem 1rem;
-            border-radius: 8px;
-        }
-
-        .nav-links a:hover {
-            background: rgba(255, 255, 255, 0.2);
-            transform: translateY(-2px);
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 2rem auto;
-            padding: 0 2rem;
-            position: relative;
-            z-index: 1;
-        }
-
-        .page-header {
-            text-align: center;
-            margin-bottom: 3rem;
-            color: white;
-        }
-
-        .page-header h1 {
-            font-size: 3.5rem;
-            margin-bottom: 1rem;
-            text-shadow: 3px 3px 6px rgba(0,0,0,0.7);
-            background: linear-gradient(45deg, #fff, #f0f0f0);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .page-header p {
-            font-size: 1.2rem;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.7);
-            opacity: 0.9;
-        }
-
-        .filters {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(15px);
-            -webkit-backdrop-filter: blur(15px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            padding: 2rem;
-            border-radius: 20px;
-            margin-bottom: 2rem;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-        }
-
-        .filter-row {
-            display: flex;
-            gap: 1rem;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-
-        .filter-group {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-
-        .filter-group label {
-            font-weight: 600;
-            color: white;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.7);
-        }
-
-        .filter-group select,
-        .filter-group input {
-            padding: 0.8rem;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            border-radius: 10px;
-            font-size: 1rem;
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            color: white;
-            transition: all 0.3s;
-        }
-
-        .filter-group select::placeholder,
-        .filter-group input::placeholder {
-            color: rgba(255, 255, 255, 0.7);
-        }
-
-        .filter-group select:focus,
-        .filter-group input:focus {
-            outline: none;
-            border-color: rgba(255, 255, 255, 0.6);
-            background: rgba(255, 255, 255, 0.2);
-            box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
-        }
-
-        .filter-group select option {
-            background: #333;
-            color: white;
-        }
-
-        .filter-btn {
-            background: linear-gradient(45deg, #667eea, #764ba2);
-            color: white;
-            border: none;
-            padding: 0.8rem 2rem;
-            border-radius: 25px;
-            cursor: pointer;
-            font-size: 1rem;
-            font-weight: 600;
-            transition: all 0.3s;
-            margin-top: 1.5rem;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-        }
-
-        .filter-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(0,0,0,0.4);
-        }
-
-        .books-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-            gap: 2rem;
-            margin-top: 2rem;
-        }
-
-        .book-card {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(15px);
-            -webkit-backdrop-filter: blur(15px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 20px;
-            overflow: hidden;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-            transition: all 0.3s;
-        }
-
-        .book-card:hover {
-            transform: translateY(-10px);
-            box-shadow: 0 15px 40px rgba(0,0,0,0.4);
-            background: rgba(255, 255, 255, 0.15);
-        }
-
-        .book-image {
-            width: 100%;
-            height: 250px;
-            background: linear-gradient(45deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 4rem;
-            color: rgba(255,255,255,0.8);
-            position: relative;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-        }
-
-        .book-image img { width:100%; height:100%; object-fit:cover; display:block; }
-
-        .book-content {
-            padding: 1.5rem;
-            color: white;
-        }
-
-        .book-category {
-            display: inline-block;
-            background: linear-gradient(45deg, #667eea, #764ba2);
-            color: white;
-            padding: 0.4rem 1rem;
-            border-radius: 25px;
-            font-size: 0.8rem;
-            font-weight: 600;
-            margin-bottom: 1rem;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-        }
-
-        .book-title {
-            font-size: 1.3rem;
-            font-weight: bold;
-            margin-bottom: 0.5rem;
-            color: white;
-            line-height: 1.4;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.7);
-        }
-
-        .book-author {
-            color: rgba(255,255,255,0.8);
-            font-weight: 600;
-            margin-bottom: 1rem;
-            font-size: 1rem;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
-        }
-
-        .book-description {
-            color: rgba(255,255,255,0.7);
-            line-height: 1.6;
-            margin-bottom: 1rem;
-            font-size: 0.9rem;
-        }
-
-        .book-meta {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
-            font-size: 0.85rem;
-            color: rgba(255,255,255,0.6);
-        }
-
-        .book-prices {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1.5rem;
-        }
-
-        .price {
-            font-weight: bold;
-            font-size: 1.1rem;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
-        }
-
-        .buy-price {
-            color: #4ade80;
-        }
-
-        .rent-price {
-            color: #38bdf8;
-        }
-
-        .book-actions {
-            display: flex;
-            gap: 0.5rem;
-        }
-
-        .btn {
-            flex: 1;
-            padding: 0.8rem;
-            border: none;
-            border-radius: 12px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: all 0.3s;
-            text-align: center;
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-        }
-
-        .btn-buy {
-            background: linear-gradient(45deg, #22c55e, #16a34a);
-            color: white;
-            box-shadow: 0 4px 15px rgba(34, 197, 94, 0.3);
-        }
-
-        .btn-buy:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(34, 197, 94, 0.4);
-        }
-
-        .btn-rent {
-            background: linear-gradient(45deg, #0ea5e9, #0284c7);
-            color: white;
-            box-shadow: 0 4px 15px rgba(14, 165, 233, 0.3);
-        }
-
-        .btn-rent:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(14, 165, 233, 0.4);
-        }
-
-        .no-books {
-            text-align: center;
-            color: white;
-            font-size: 1.2rem;
-            margin-top: 3rem;
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(15px);
-            -webkit-backdrop-filter: blur(15px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            padding: 3rem;
-            border-radius: 20px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-        }
-
-        .genre-tags {
-            margin-bottom: 1rem;
-        }
-
-        .genre-tag {
-            display: inline-block;
-            background: rgba(255, 255, 255, 0.2);
-            color: white;
-            padding: 0.3rem 0.8rem;
-            border-radius: 15px;
-            font-size: 0.7rem;
-            margin-right: 0.3rem;
-            margin-bottom: 0.3rem;
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        @media (max-width: 768px) {
-            .nav {
-                flex-direction: column;
-                gap: 1rem;
-            }
-
-            .nav-links {
-                gap: 1rem;
-            }
-
-            .books-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .filter-row {
-                flex-direction: column;
-                align-items: stretch;
-            }
-
-            .filter-group {
-                width: 100%;
-            }
-
-            .page-header h1 {
-                font-size: 2.5rem;
-            }
-        }
-
-        /* Loading animation for video */
-        .video-loading {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            z-index: -2;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Books Library - Arcade</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='arcade.css') }}" />
+  <style>
+    .page-header { text-align: left; }
+    .book-author { font-size: 0.95rem; color: var(--muted); margin-bottom: 0.6rem; }
+    .book-description { font-size: 0.95rem; color: var(--muted); margin-bottom: 1rem; }
+    .book-prices { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+    .price { font-weight: 700; }
+    .buy-price { color: #7df9c2; }
+    .rent-price { color: #7dd3fc; }
+  </style>
 </head>
 <body>
-    <!-- Background Video -->
-    <div class="video-background">
-        <div class="video-loading"></div>
-        <video autoplay muted loop playsinline id="bgVideo">
-            <source src="{{ url_for('static', filename='books.mp4') }}" type="video/mp4">
-            <!-- Fallback gradient background -->
-        </video>
-        <div class="video-overlay"></div>
-    </div>
+  {% include 'partials/header.html' %}
 
-    {% include 'partials/header.html' %}
+  <main class="page-shell">
+    <header class="page-header">
+      <p class="badge">Curated Library</p>
+      <h1 class="page-title">Books Library</h1>
+      <p class="page-subtitle">Search by category, author, or title and build your stack.</p>
+    </header>
 
-    <div class="container">
-        <div class="page-header">
-            <h1>📚 Books Library</h1>
-            <p>Discover manga, novels, light novels, and more!</p>
-        </div>
-
-        <div class="filters">
-            <form method="GET">
-                <div class="filter-row">
-                    <div class="filter-group">
-                        <label for="category">Category:</label>
-                        <select name="category" id="category">
-                            <option value="">All Categories</option>
-                            {% for category in categories %}
-                                <option value="{{ category }}" 
-                                    {% if selected_category == category %}selected{% endif %}>
-                                    {{ category }}
-                                </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    
-                    <div class="filter-group">
-                        <label for="search">Search:</label>
-                        <input type="text" name="search" id="search" 
-                               placeholder="Search by title, author, or description..." 
-                               value="{{ search_term or '' }}">
-                    </div>
-                </div>
-                <button type="submit" class="filter-btn">Apply Filters</button>
-            </form>
-        </div>
-
-        {% if books %}
-          <div class="books-grid">
-            {% for book in books %}
-            <div class="book-card">
-              <div class="book-image">
-                                {% if book.image or book.image_static %}
-                                    <img
-                                        src="{{ url_for('static', filename=(book.image_static or book.image)) }}"
-                    alt="{{ book.title }}"
-                    loading="lazy"
-                    onerror="this.remove(); this.parentElement.textContent='📖';"
-                  >
-                {% else %}
-                  📖
-                {% endif %}
-              </div>
-              <div class="book-content">
-                <span class="book-category">{{ book.category }}</span>
-                <h3 class="book-title">{{ book.title }}</h3>
-                <div class="book-author">by {{ book.author }}</div>
-                
-                {% if book.genre %}
-                <div class="genre-tags">
-                    {% for genre in book.genre.split(',') %}
-                        <span class="genre-tag">{{ genre | trim }}</span>
-                    {% endfor %}
-                </div>
-                {% endif %}
-                
-                <p class="book-description">{{ book.description }}</p>
-                
-                <div class="book-meta">
-                    {% if book.pages %}
-                        <span>{{ book.pages }} pages</span>
-                    {% endif %}
-                    {% if book.publication_year %}
-                        <span>{{ book.publication_year }}</span>
-                    {% endif %}
-                </div>
-                
-                <div class="book-prices">
-                    <span class="price buy-price">Buy: {{ book.buy_price|inr }}</span>
-                    <span class="price rent-price">Rent: {{ book.rent_price|inr }}</span>
-                </div>
-                
-                <div class="book-actions" style="margin-top:.5rem;">
-            <button class="btn btn-rent" style="background:linear-gradient(45deg,#8b5cf6,#6d28d9)" 
-                data-id="{{ book.id }}" data-type="book" data-action="buy" onclick="addToCartEl(this)">
-                        Add to Cart (Buy)
-                    </button>
-            <button class="btn btn-secondary" style="background:#475569"
-                data-id="{{ book.id }}" data-type="book" data-action="rent" onclick="addToCartEl(this)">
-                        Add to Cart (Rent)
-                    </button>
-                </div>
-              </div>
-            </div>
-            {% endfor %}
+    <section class="filters">
+      <form method="GET">
+        <div class="filter-row">
+          <div class="filter-group">
+            <label for="category">Category</label>
+            <select name="category" id="category">
+              <option value="">All Categories</option>
+              {% for cat in categories %}
+                <option value="{{ cat }}" {% if selected_category == cat %}selected{% endif %}>{{ cat }}</option>
+              {% endfor %}
+            </select>
           </div>
-        {% else %}
-            <div class="no-books">
-                <h3>No books found</h3>
-                <p>Try adjusting your search criteria or browse all categories.</p>
+          <div class="filter-group">
+            <label for="search">Search</label>
+            <input type="text" name="search" id="search" placeholder="Title, author, or description" value="{{ search_term or '' }}" />
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary filter-btn">Apply Filters</button>
+      </form>
+    </section>
+
+    {% if books %}
+      <section class="books-grid">
+        {% for book in books %}
+          <article class="book-card">
+            <div class="book-image">
+              {% if book.image or book.image_static %}
+                <img src="{{ url_for('static', filename=(book.image_static or book.image)) }}" alt="{{ book.title }}" />
+              {% else %}
+                BOOK
+              {% endif %}
             </div>
-        {% endif %}
-    </div>
+            <div class="book-content">
+              <span class="pill">{{ book.category or 'Book' }}</span>
+              <h3 class="book-title">{{ book.title }}</h3>
+              <div class="book-author">by {{ book.author }}</div>
+              <div class="book-description">{{ book.description }}</div>
+              <div class="book-prices">
+                <span class="price buy-price">Buy: {{ book.buy_price|inr }}</span>
+                <span class="price rent-price">Rent: {{ book.rent_price|inr }}</span>
+              </div>
+              <div class="book-actions">
+                <button class="btn btn-buy" data-id="{{ book.id }}" data-type="book" data-action="buy" onclick="addToCartEl(this)">Buy</button>
+                <button class="btn btn-rent" data-id="{{ book.id }}" data-type="book" data-action="rent" onclick="addToCartEl(this)">Rent</button>
+              </div>
+            </div>
+          </article>
+        {% endfor %}
+      </section>
+    {% else %}
+      <div class="section-card" style="margin-top: 2rem; text-align: center;">
+        <h3>No books found</h3>
+        <p>Try different filters or browse all categories.</p>
+      </div>
+    {% endif %}
+  </main>
 
-    <script>
-        // Video error handling
-        document.getElementById('bgVideo').addEventListener('error', function() {
-            console.log('Video failed to load, using fallback background');
-            this.style.display = 'none';
-        });
-
-        // (Removed direct buy/rent actions to focus on Add to Cart flow)
-
-        function addToCart(itemId, itemType, action) {
-            fetch('/api/cart/add', {
-                method: 'POST',
-                headers: {'Content-Type':'application/json'},
-                body: JSON.stringify({ itemId, itemType, action, quantity: 1 })
-            }).then(r => r.json())
-             .then(d => {
-                if (d.success) {
-                    const nodes = document.querySelectorAll('[data-cart-count]');
-                    nodes.forEach(n => n.textContent = d.count);
-                } else {
-                    alert(d.error || 'Failed to add to cart');
-                }
-             }).catch(() => alert('Error adding to cart'));
+  <script>
+    function addToCart(itemId, itemType, action) {
+      fetch('/api/cart/add', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify({ itemId, itemType, action, quantity: 1 })
+      })
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) {
+          document.querySelectorAll('[data-cart-count]').forEach(n => n.textContent = d.count);
+        } else {
+          alert(d.error || 'Failed to add to cart');
         }
+      })
+      .catch(() => alert('Error adding to cart'));
+    }
 
-        function addToCartEl(el){
-            const id = Number(el.getAttribute('data-id'));
-            const type = el.getAttribute('data-type');
-            const action = el.getAttribute('data-action');
-            addToCart(id, type, action);
-        }
-    </script>
+    function addToCartEl(el){
+      const id = Number(el.getAttribute('data-id'));
+      const type = el.getAttribute('data-type');
+      const action = el.getAttribute('data-action');
+      addToCart(id, type, action);
+    }
+  </script>
 </body>
 </html>

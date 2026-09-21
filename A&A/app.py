@@ -2,12 +2,44 @@ import os
 import sqlite3
 import io
 import csv
+import json
+import random
+import urllib.request
+import urllib.error
 from flask import Flask, render_template, request, session, redirect, url_for, flash, jsonify, make_response
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
-from models import db, User
+from models import db, User, ConstellationChat, ConstellationMessage, IdeaMessage, ConstellationNode, IdeaNode, ConstellationEdge, IdeaEdge
 
-from sqlalchemy import text
+from sqlalchemy import text, func
+
+try:
+    from flask_cors import CORS
+except ImportError:
+    CORS = None
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+try:
+    from pymongo import MongoClient, ASCENDING, DESCENDING
+    from pymongo.errors import PyMongoError
+except ImportError:
+    MongoClient = None
+    ASCENDING = 1
+    DESCENDING = -1
+    PyMongoError = Exception
+
+try:
+    import cloudinary
+    import cloudinary.uploader
+    _CLOUDINARY_AVAILABLE = True
+except ImportError:
+    _CLOUDINARY_AVAILABLE = False
+
 # import blueprints safely (package vs script execution)
 try:
     from .games_api import games_bp
@@ -37,16 +69,45 @@ def create_app(config=None):
     # a writable persistent mount (e.g. /mnt/instance) so SQLite files survive
     # across deploys.
     inst_override = os.environ.get('INSTANCE_PATH')
+    
+    # Vercel Serverless Functions have a Read-Only filesystem except for /tmp
+    if os.environ.get('VERCEL') == '1':
+        inst_override = '/tmp'
+        
     if inst_override:
         # normalize and ensure directory exists
         inst_override = os.path.abspath(inst_override)
         os.makedirs(inst_override, exist_ok=True)
         app.instance_path = inst_override
+    else:
+        try:
+            os.makedirs(app.instance_path, exist_ok=True)
+        except OSError:
+            pass
+
     app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key-change-me")
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
+    
+    database_url = (os.getenv('DATABASE_URL') or '').strip()
+    if database_url.startswith('postgres://'):
+        database_url = database_url.replace('postgres://', 'postgresql+psycopg://', 1)
+    elif database_url.startswith('postgresql://') and '+psycopg' not in database_url.split('://', 1)[0]:
+        database_url = database_url.replace('postgresql://', 'postgresql+psycopg://', 1)
+
+    if database_url:
+        app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+    else:
+        # Safely construct absolute URI for SQLAlchemy
+        db_path = os.path.join(app.instance_path, 'users.db').replace('\\', '/')
+        # If absolute path starts with / (like /tmp), we need an extra slash
+        uri_prefix = 'sqlite:////' if db_path.startswith('/') else 'sqlite:///'
+        app.config['SQLALCHEMY_DATABASE_URI'] = uri_prefix + db_path.lstrip('/')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
     db.init_app(app)
+
+    # Initialize CORS for cross-device WiFi support
+    if CORS is not None:
+        CORS(app, resources={r"/api/*": {"origins": "*"}})
 
     # ---- Currency helpers ----
     @app.template_filter('inr')
@@ -69,6 +130,209 @@ def create_app(config=None):
             'usd_to_inr_rate': float(os.getenv('USD_TO_INR', '83'))
         }
 
+    def _generate_user_tag():
+        for _ in range(10000):
+            tag = f"{random.randint(0, 9999):04d}"
+            if not User.query.filter_by(user_tag=tag).first():
+                return tag
+        raise RuntimeError('No user tags available')
+
+    def _ensure_user_tag(user):
+        if user and not getattr(user, 'user_tag', None):
+            user.user_tag = _generate_user_tag()
+            db.session.commit()
+        return getattr(user, 'user_tag', None) if user else None
+
+    def _mongo_configured():
+        return bool((os.getenv('MONGODB_URI') or '').strip()) and MongoClient is not None
+
+    def _mongo_enabled():
+        return _mongo_configured()
+
+    def _mongo_available():
+        if os.environ.get('VERCEL') == '1' and _mongo_configured():
+            return True
+        return _mongo_db() is not None
+
+    def _mongo_db():
+        if not _mongo_enabled():
+            return None
+        if not hasattr(app, 'mongo_client'):
+            try:
+                app.mongo_client = MongoClient((os.getenv('MONGODB_URI') or '').strip(), serverSelectionTimeoutMS=5000)
+                app.mongo_client.admin.command('ping')
+                app.mongo_db = app.mongo_client[(os.getenv('MONGODB_DB') or 'arcade').strip() or 'arcade']
+                _ensure_mongo_indexes(app.mongo_db)
+            except Exception as exc:
+                if hasattr(app, 'mongo_client'):
+                    delattr(app, 'mongo_client')
+                if hasattr(app, 'mongo_db'):
+                    delattr(app, 'mongo_db')
+                app.logger.warning("MongoDB connection unavailable; falling back to local storage: %s", exc)
+                return None
+        return app.mongo_db
+
+    def _ensure_mongo_indexes(mdb):
+        mdb.users.create_index([('handle_lc', ASCENDING)], unique=True)
+        mdb.users.create_index([('username_lc', ASCENDING)], unique=True)
+        mdb.friend_requests.create_index([('pair_key', ASCENDING)], unique=True)
+        mdb.friend_requests.create_index([('receiver_key', ASCENDING), ('status', ASCENDING)])
+        mdb.chats.create_index([('chat_id', ASCENDING)], unique=True)
+        mdb.chats.create_index([('participants', ASCENDING)])
+        mdb.messages.create_index([('chat_id', ASCENDING), ('created_at', ASCENDING)])
+        mdb.idea_messages.create_index([('chat_id', ASCENDING), ('created_at', ASCENDING)])
+        mdb.graph_nodes.create_index([('chat_id', ASCENDING), ('label_lc', ASCENDING), ('mode', ASCENDING)], unique=True)
+        mdb.graph_edges.create_index([('chat_id', ASCENDING), ('source_label_lc', ASCENDING), ('target_label_lc', ASCENDING), ('mode', ASCENDING)], unique=True)
+
+    def _cloudinary_configured():
+        """Return True if Cloudinary credentials are available (via CLOUDINARY_URL or individual vars)."""
+        if not _CLOUDINARY_AVAILABLE:
+            return False
+        cloud_url = (os.getenv('CLOUDINARY_URL') or '').strip()
+        if cloud_url:
+            return True
+        # Individual vars
+        return bool(os.getenv('CLOUDINARY_CLOUD_NAME') and os.getenv('CLOUDINARY_API_KEY') and os.getenv('CLOUDINARY_API_SECRET'))
+
+    def _cloudinary_upload(file_obj, folder='constellation', resource_type='auto'):
+        """Upload a file-like object to Cloudinary and return (secure_url, error)."""
+        if not _CLOUDINARY_AVAILABLE:
+            return None, 'Cloudinary package not installed'
+        cloud_url = (os.getenv('CLOUDINARY_URL') or '').strip()
+        if cloud_url:
+            cloudinary.config(cloudinary_url=cloud_url)
+        else:
+            cloudinary.config(
+                cloud_name=os.getenv('CLOUDINARY_CLOUD_NAME', ''),
+                api_key=os.getenv('CLOUDINARY_API_KEY', ''),
+                api_secret=os.getenv('CLOUDINARY_API_SECRET', ''),
+                secure=True
+            )
+        try:
+            # Read bytes from the file object so Cloudinary receives a bytes buffer
+            import io
+            file_bytes = file_obj.read()
+            result = cloudinary.uploader.upload(
+                io.BytesIO(file_bytes),
+                folder=folder,
+                resource_type=resource_type,
+                use_filename=True,
+                unique_filename=True
+            )
+            return result.get('secure_url'), None
+        except Exception as exc:
+            return None, str(exc)
+
+    def _mongo_key(username):
+        return (username or '').strip().lower()
+
+    def _mongo_pair_key(a, b):
+        return '|'.join(sorted([_mongo_key(a), _mongo_key(b)]))
+
+    def _mongo_chat_id(a, b):
+        return _mongo_pair_key(a, b)
+
+    def _mongo_current_user():
+        if not _mongo_enabled():
+            return None
+        username = (session.get('user') or session.get('username') or '').strip()
+        if not username:
+            return None
+        user = db.session.get(User, int(session.get('user_id') or 0)) if session.get('user_id') else None
+        tag = session.get('user_tag') or (getattr(user, 'user_tag', None) if user else None)
+        if user and not tag:
+            tag = _ensure_user_tag(user)
+        if not tag:
+            tag = f"{random.randint(0, 9999):04d}"
+            session['user_tag'] = tag
+        handle = f"{username}#{tag}"
+        doc = {
+            '_id': _mongo_key(username),
+            'username': username,
+            'username_lc': _mongo_key(username),
+            'user_tag': tag,
+            'handle': handle,
+            'handle_lc': handle.lower(),
+            'display_name': getattr(user, 'display_name', None) or username,
+            'photo_path': getattr(user, 'photo_path', None),
+        }
+        mdb = _mongo_db()
+        if mdb is None:
+            return None
+        mdb.users.update_one({'_id': doc['_id']}, {'$set': doc}, upsert=True)
+        return doc
+
+    def _mongo_public_user(doc):
+        if not doc:
+            return None
+        return {
+            'id': doc['_id'],
+            'username': doc.get('username'),
+            'user_tag': doc.get('user_tag'),
+            'handle': doc.get('handle'),
+            'display_name': doc.get('display_name') or doc.get('username'),
+            'photo_path': doc.get('photo_path')
+        }
+
+    def _mongo_find_user_by_handle(handle):
+        handle = (handle or '').strip()
+        if handle.startswith('@'):
+            handle = handle[1:].strip()
+        mdb = _mongo_db()
+        if mdb is None:
+            return None
+        return mdb.users.find_one({'handle_lc': handle.lower()})
+
+    def _mongo_are_friends(a, b):
+        mdb = _mongo_db()
+        if mdb is None:
+            return False
+        req = mdb.friend_requests.find_one({'pair_key': _mongo_pair_key(a, b), 'status': 'accepted'})
+        return bool(req)
+
+    def _mongo_upsert_graph(mode, chat_id, labels, edges):
+        mdb = _mongo_db()
+        for label in _dedupe_labels(labels, max_items=10):
+            mdb.graph_nodes.update_one(
+                {'chat_id': chat_id, 'mode': mode, 'label_lc': label.lower()},
+                {'$setOnInsert': {'chat_id': chat_id, 'mode': mode, 'label': label, 'node_type': 'idea' if mode == 'ideas' else 'topic'},
+                 '$inc': {'mention_count': 1}},
+                upsert=True
+            )
+        for src, tgt in edges:
+            src, tgt = _clean_graph_label(src), _clean_graph_label(tgt)
+            if not src or not tgt or src.lower() == tgt.lower():
+                continue
+            a, b = sorted([src, tgt], key=str.lower)
+            mdb.graph_edges.update_one(
+                {'chat_id': chat_id, 'mode': mode, 'source_label_lc': a.lower(), 'target_label_lc': b.lower()},
+                {'$setOnInsert': {'chat_id': chat_id, 'mode': mode, 'source_label': a, 'target_label': b},
+                 '$inc': {'weight': 1}},
+                upsert=True
+            )
+
+    def _mongo_graph(mode, chat_id):
+        mdb = _mongo_db()
+        nodes = list(mdb.graph_nodes.find({'chat_id': chat_id, 'mode': mode}).sort('mention_count', DESCENDING))
+        label_to_id = {}
+        out_nodes = []
+        for i, n in enumerate(nodes, start=1):
+            node_id = n.get('label_lc')
+            label_to_id[node_id] = node_id
+            out_nodes.append({
+                'id': node_id,
+                'label': n.get('label'),
+                'node_type': n.get('node_type', 'idea' if mode == 'ideas' else 'topic'),
+                'mention_count': n.get('mention_count', 1)
+            })
+        out_edges = []
+        for e in mdb.graph_edges.find({'chat_id': chat_id, 'mode': mode}):
+            src = e.get('source_label_lc')
+            tgt = e.get('target_label_lc')
+            if src in label_to_id and tgt in label_to_id:
+                out_edges.append({'source_node_id': src, 'target_node_id': tgt, 'weight': e.get('weight', 1)})
+        return {'nodes': out_nodes, 'edges': out_edges}
+
     @app.before_request
     def create_tables():
         if not hasattr(app, 'db_initialized'):
@@ -77,19 +341,31 @@ def create_app(config=None):
             # Self-heal User table to ensure profile columns exist
             try:
                 with db.engine.begin() as conn:
-                    cols = [row[1] for row in conn.exec_driver_sql('PRAGMA table_info(users)').fetchall()]
+                    user_table = User.__tablename__
+                    quoted_user_table = '"' + user_table.replace('"', '""') + '"'
+                    cols = [row[1] for row in conn.exec_driver_sql(f'PRAGMA table_info({quoted_user_table})').fetchall()]
                     if 'display_name' not in cols:
-                        conn.exec_driver_sql('ALTER TABLE users ADD COLUMN display_name VARCHAR(120)')
+                        conn.exec_driver_sql(f'ALTER TABLE {quoted_user_table} ADD COLUMN display_name VARCHAR(120)')
                     if 'photo_path' not in cols:
-                        conn.exec_driver_sql('ALTER TABLE users ADD COLUMN photo_path VARCHAR(255)')
+                        conn.exec_driver_sql(f'ALTER TABLE {quoted_user_table} ADD COLUMN photo_path VARCHAR(255)')
+                    if 'user_tag' not in cols:
+                        conn.exec_driver_sql(f'ALTER TABLE {quoted_user_table} ADD COLUMN user_tag VARCHAR(4)')
+                    if 'email' not in cols:
+                        conn.exec_driver_sql(f'ALTER TABLE {quoted_user_table} ADD COLUMN email VARCHAR(255)')
             except Exception:
                 pass
+            try:
+                for user in User.query.filter((User.user_tag == None) | (User.user_tag == '')).all():
+                    user.user_tag = _generate_user_tag()
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
             # Ensure a default admin user exists for demo access
             try:
                 from sqlalchemy.exc import SQLAlchemyError
                 if not User.query.filter_by(username='admin').first():
                     admin_pw = os.getenv('ADMIN_DEFAULT_PASSWORD', 'admin123')
-                    admin_user = User(username='admin', password_hash=generate_password_hash(admin_pw))
+                    admin_user = User(username='admin', password_hash=generate_password_hash(admin_pw), user_tag=_generate_user_tag())
                     db.session.add(admin_user)
                     db.session.commit()
             except Exception:
@@ -161,19 +437,56 @@ def create_app(config=None):
             return redirect(url_for('login'))
         return redirect(url_for('index'))
 
+    @app.route('/api/network-status')
+    def network_status():
+        """Network diagnostics endpoint for cross-device connectivity testing"""
+        import socket
+        try:
+            hostname = socket.gethostname()
+            ip_addr = socket.gethostbyname(hostname)
+            client_ip = request.remote_addr
+            return jsonify({
+                'status': 'online',
+                'server': {
+                    'hostname': hostname,
+                    'ip': ip_addr,
+                    'port': 5000,
+                    'urls': {
+                        'local': 'http://127.0.0.1:5000',
+                        'network': f'http://{ip_addr}:5000'
+                    }
+                },
+                'client': {
+                    'ip': client_ip,
+                    'user_agent': request.headers.get('User-Agent', 'Unknown')
+                },
+                'same_network': client_ip.startswith(ip_addr.rsplit('.', 1)[0]) if '.' in ip_addr and '.' in client_ip else False,
+                'timestamp': str(__import__('datetime').datetime.now().isoformat())
+            })
+        except Exception as e:
+            return jsonify({
+                'status': 'error',
+                'message': str(e),
+                'client_ip': request.remote_addr
+            }), 500
+
     @app.route('/login', methods=['GET', 'POST'])
     def login():
         if request.method == 'POST':
-            username = request.form.get('ident')  # Changed from username to ident
+            username = (request.form.get('ident') or '').strip()
             password = request.form.get('password')
             if not username or not password:
                 flash("Please enter both username and password")
                 return redirect(url_for('login'))
 
-            user = User.query.filter_by(username=username).first()
+            user = User.query.filter((User.username == username) | (User.email == username.lower())).first()
             if user and check_password_hash(user.password_hash, password):
-                session['user'] = username
+                _ensure_user_tag(user)
+                session['user'] = user.username
                 session['user_id'] = user.id  # Add user_id to match auth.py
+                session['user_tag'] = user.user_tag
+                if _mongo_available():
+                    _mongo_current_user()
                 # If a community email is present from a prior join, link it to this account
                 try:
                     cem = (session.get('community_email') or '').strip().lower()
@@ -194,17 +507,20 @@ def create_app(config=None):
     @app.route('/signup', methods=['GET', 'POST'])
     def signup():
         if request.method == 'POST':
-            username = request.form.get('username')
+            username = (request.form.get('username') or '').strip()
+            email = (request.form.get('email') or '').strip().lower()
             password = request.form.get('password')
-            if not username or not password:
-                flash("Both fields are required")
+            if not username or not email or not password:
+                flash("Username, email and password are required")
                 return redirect(url_for('signup'))
 
             if User.query.filter_by(username=username).first():
                 flash('Username already exists')
+            elif User.query.filter_by(email=email).first():
+                flash('Email already exists')
             else:
                 hashed_pw = generate_password_hash(password)
-                new_user = User(username=username, password_hash=hashed_pw)
+                new_user = User(username=username, email=email, password_hash=hashed_pw, user_tag=_generate_user_tag())
                 db.session.add(new_user)
                 db.session.commit()
                 # Reset and set session identity to the new user
@@ -212,6 +528,9 @@ def create_app(config=None):
                 session.pop('user_id', None)
                 session['user'] = username
                 session['user_id'] = new_user.id
+                session['user_tag'] = new_user.user_tag
+                if _mongo_available():
+                    _mongo_current_user()
                 # Link existing community email (if any in session) to new account
                 try:
                     cem = (session.get('community_email') or '').strip().lower()
@@ -233,6 +552,7 @@ def create_app(config=None):
         session.pop('user', None)
         session.pop('username', None)
         session.pop('user_id', None)
+        session.pop('user_tag', None)
         session.pop('cart', None)
         session.pop('community_email', None)
         return redirect(url_for('index'))
@@ -1253,6 +1573,1463 @@ def create_app(config=None):
         resp.headers['Content-Type'] = 'text/csv'
         resp.headers['Content-Disposition'] = 'attachment; filename=revenue.csv'
         return resp
+
+    # =====================================================================
+    # KNOWLEDGE CONSTELLATION
+    # =====================================================================
+
+    # --- Topic keyword map (label -> list of trigger words) ---
+    _TOPIC_KEYWORDS = {
+        "GATE 2026":        ["gate 2026", "gate2026", "gate exam", "gate"],
+        "Algorithms":       ["algorithm", "algorithms", "dsa", "sorting", "binary search",
+                             "graph traversal", "bfs", "dfs", "dynamic programming", "dp",
+                             "greedy", "recursion", "backtracking", "heap", "tree"],
+        "Operating Systems":["operating system", "os", "process", "semaphore", "scheduling",
+                             "deadlock", "paging", "segmentation", "memory management",
+                             "thread", "mutex", "ipc"],
+        "Computer Networks":["network", "tcp", "ip", "http", "dns", "routing", "subnet",
+                             "osi", "socket", "bandwidth", "protocol"],
+        "Databases":        ["sql", "database", "dbms", "query", "normalization",
+                             "transaction", "acid", "index", "join", "er diagram"],
+        "Mathematics":      ["math", "calculus", "linear algebra", "probability",
+                             "statistics", "discrete math", "combinatorics", "matrix"],
+        "Study Material":   ["notes", "note", "pdf", "question paper", "pyq",
+                             "previous year", "study material", "cheat sheet", "formula"],
+        "Data Structures":  ["data structure", "linked list", "stack", "queue", "array",
+                             "hash table", "hashmap", "trie", "segment tree"],
+        "Theory of Computation": ["toc", "automata", "turing machine", "context free",
+                                  "regular expression", "grammar", "pushdown"],
+        "Computer Architecture": ["architecture", "cpu", "cache", "pipeline", "risc",
+                                  "cisc", "instruction set", "register"],
+    }
+
+    def _constellation_db_path():
+        os.makedirs(app.instance_path, exist_ok=True)
+        return os.path.join(app.instance_path, 'constellation.db')
+
+    def _ensure_constellation_tables(conn):
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS chats (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user1_id INTEGER NOT NULL,
+                user2_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE(user1_id, user2_id)
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS friend_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                requester_id INTEGER NOT NULL,
+                receiver_id INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at TEXT NOT NULL,
+                responded_at TEXT,
+                UNIQUE(requester_id, receiver_id)
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER NOT NULL,
+                sender_id INTEGER NOT NULL,
+                content TEXT,
+                file_path TEXT,
+                file_name TEXT,
+                file_type TEXT,
+                created_at TEXT NOT NULL
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS constellation_nodes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER NOT NULL,
+                label TEXT NOT NULL,
+                node_type TEXT NOT NULL DEFAULT 'topic',
+                source_message_id INTEGER,
+                mention_count INTEGER DEFAULT 1,
+                created_at TEXT NOT NULL,
+                UNIQUE(chat_id, label)
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS constellation_edges (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER NOT NULL,
+                source_node_id INTEGER NOT NULL,
+                target_node_id INTEGER NOT NULL,
+                weight INTEGER DEFAULT 1,
+                UNIQUE(chat_id, source_node_id, target_node_id)
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS idea_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER NOT NULL,
+                sender_id INTEGER NOT NULL,
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS idea_nodes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER NOT NULL,
+                label TEXT NOT NULL,
+                source_message_id INTEGER,
+                mention_count INTEGER DEFAULT 1,
+                created_at TEXT NOT NULL,
+                UNIQUE(chat_id, label)
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS idea_edges (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER NOT NULL,
+                source_node_id INTEGER NOT NULL,
+                target_node_id INTEGER NOT NULL,
+                weight INTEGER DEFAULT 1,
+                UNIQUE(chat_id, source_node_id, target_node_id)
+            )
+        """)
+        conn.commit()
+
+    _STOPWORDS = {
+        'the','and','for','that','with','this','from','your','you','are','but','not','was','were','have','has','had',
+        'our','out','into','about','there','their','then','than','them','they','will','would','what','when','where',
+        'which','while','who','how','why','can','could','should','a','an','in','on','of','to','by','as','is','it',
+        'be','or','at','if','we','i','me','my','mine','us','do','does','did','so','up','down','over','under'
+    }
+
+    def _extract_keywords(text, max_terms=6):
+        if not text:
+            return []
+        import re
+        text_l = text.lower()
+        tags = re.findall(r"#([a-z0-9][a-z0-9_-]{1,})", text_l)
+        words = re.findall(r"[a-z][a-z0-9+#-]{2,}", text_l)
+        counts = {}
+        for w in words:
+            if w in _STOPWORDS:
+                continue
+            w = w.strip('#')
+            if w in _STOPWORDS or len(w) < 3:
+                continue
+            counts[w] = counts.get(w, 0) + 1
+        for t in tags:
+            counts[t] = counts.get(t, 0) + 2
+        ordered = sorted(counts.items(), key=lambda x: (-x[1], x[0]))
+        return [k.title() for k, _ in ordered[:max_terms]]
+
+    def _extract_topics(text):
+        """Return list of matching topic labels from message text."""
+        if not text:
+            return []
+        tl = text.lower()
+        found = []
+        for label, keywords in _TOPIC_KEYWORDS.items():
+            for kw in keywords:
+                if kw in tl:
+                    found.append(label)
+                    break
+        keywords = _extract_keywords(text)
+        for kw in keywords:
+            if kw not in found:
+                found.append(kw)
+        return found
+
+    def _clean_graph_label(label):
+        label = (label or '').strip()
+        label = ' '.join(label.replace('\n', ' ').split())
+        if len(label) > 42:
+            label = label[:42].rstrip()
+        return label
+
+    def _dedupe_labels(labels, max_items=8):
+        seen = set()
+        clean = []
+        for label in labels or []:
+            label = _clean_graph_label(label)
+            key = label.lower()
+            if not label or key in seen:
+                continue
+            seen.add(key)
+            clean.append(label)
+            if len(clean) >= max_items:
+                break
+        return clean
+
+    def _openai_json_request(payload, timeout=12):
+        api_key = os.getenv('OPENAI_API_KEY', '').strip()
+        if not api_key:
+            return None
+        api_url = os.getenv('OPENAI_API_BASE_URL', '').strip()
+        if not api_url:
+            api_url = 'https://openrouter.ai/api/v1/chat/completions' if api_key.startswith('sk-or-') else 'https://api.openai.com/v1/chat/completions'
+        body = json.dumps(payload).encode('utf-8')
+        headers = {
+            'Authorization': f'Bearer {api_key}',
+            'Content-Type': 'application/json',
+        }
+        if 'openrouter.ai' in api_url:
+            headers['HTTP-Referer'] = os.getenv('APP_PUBLIC_URL', 'http://localhost:5000')
+            headers['X-Title'] = os.getenv('APP_NAME', 'Arcade')
+        req = urllib.request.Request(
+            api_url,
+            data=body,
+            headers=headers,
+            method='POST'
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return json.loads(resp.read().decode('utf-8'))
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError):
+            return None
+
+    def _extract_idea_graph_with_ai(context_messages):
+        """Return AI-suggested graph labels and edges from recent chat context."""
+        if not os.getenv('OPENAI_API_KEY', '').strip():
+            return None
+        compact_messages = []
+        for m in context_messages[-24:]:
+            content = (m.get('content') or '').strip()
+            if content:
+                compact_messages.append({
+                    'mode': m.get('mode', 'chat'),
+                    'sender': str(m.get('sender_id', '')),
+                    'content': content[:700],
+                })
+        if not compact_messages:
+            return None
+
+        api_key = os.getenv('OPENAI_API_KEY', '').strip()
+        default_model = 'openai/gpt-4o-mini' if api_key.startswith('sk-or-') else 'gpt-4o-mini'
+        payload = {
+            'model': os.getenv('OPENAI_IDEA_MODEL', default_model),
+            'temperature': 0.2,
+            'response_format': {'type': 'json_object'},
+            'messages': [
+                {
+                    'role': 'system',
+                    'content': (
+                        'You turn a two-person project conversation into a small meaningful graph. '
+                        'Return only JSON with "nodes" and "edges". Nodes must be short noun phrases. '
+                        'Edges must connect related node labels that both appear in nodes. Avoid generic labels.'
+                    )
+                },
+                {
+                    'role': 'user',
+                    'content': json.dumps({
+                        'max_nodes': 8,
+                        'max_edges': 10,
+                        'messages': compact_messages
+                    })
+                }
+            ]
+        }
+        result = _openai_json_request(payload)
+        try:
+            raw = result['choices'][0]['message']['content']
+            graph = json.loads(raw)
+        except (TypeError, KeyError, IndexError, json.JSONDecodeError):
+            return None
+
+        nodes = _dedupe_labels(graph.get('nodes'), max_items=8)
+        node_keys = {n.lower(): n for n in nodes}
+        edges = []
+        for edge in graph.get('edges') or []:
+            if isinstance(edge, dict):
+                src = edge.get('source') or edge.get('from')
+                tgt = edge.get('target') or edge.get('to')
+            elif isinstance(edge, (list, tuple)) and len(edge) >= 2:
+                src, tgt = edge[0], edge[1]
+            else:
+                continue
+            src = node_keys.get(_clean_graph_label(src).lower())
+            tgt = node_keys.get(_clean_graph_label(tgt).lower())
+            if src and tgt and src != tgt:
+                pair = tuple(sorted((src, tgt), key=str.lower))
+                if pair not in edges:
+                    edges.append(pair)
+            if len(edges) >= 10:
+                break
+        return {'nodes': nodes, 'edges': edges} if nodes else None
+
+    def _upsert_node(cur, chat_id, label, node_type, msg_id, now):
+        """Insert or increment mention_count for a node; returns its id."""
+        cur.execute(
+            "SELECT id, mention_count FROM constellation_nodes WHERE chat_id=? AND label=?",
+            (chat_id, label)
+        )
+        row = cur.fetchone()
+        if row:
+            cur.execute(
+                "UPDATE constellation_nodes SET mention_count=mention_count+1 WHERE id=?",
+                (row[0],)
+            )
+            return row[0]
+        else:
+            cur.execute(
+                """INSERT INTO constellation_nodes(chat_id, label, node_type, source_message_id, mention_count, created_at)
+                   VALUES(?,?,?,?,1,?)""",
+                (chat_id, label, node_type, msg_id, now)
+            )
+            return cur.lastrowid
+
+    def _upsert_edge(cur, chat_id, src_id, tgt_id):
+        if src_id == tgt_id:
+            return
+        a, b = (src_id, tgt_id) if src_id < tgt_id else (tgt_id, src_id)
+        cur.execute(
+            "SELECT id FROM constellation_edges WHERE chat_id=? AND source_node_id=? AND target_node_id=?",
+            (chat_id, a, b)
+        )
+        row = cur.fetchone()
+        if row:
+            cur.execute(
+                "UPDATE constellation_edges SET weight=weight+1 WHERE id=?", (row[0],)
+            )
+        else:
+            cur.execute(
+                "INSERT INTO constellation_edges(chat_id, source_node_id, target_node_id, weight) VALUES(?,?,?,1)",
+                (chat_id, a, b)
+            )
+
+    def _upsert_idea_node(cur, chat_id, label, msg_id, now):
+        cur.execute(
+            "SELECT id, mention_count FROM idea_nodes WHERE chat_id=? AND label=?",
+            (chat_id, label)
+        )
+        row = cur.fetchone()
+        if row:
+            cur.execute(
+                "UPDATE idea_nodes SET mention_count=mention_count+1 WHERE id=?",
+                (row[0],)
+            )
+            return row[0]
+        cur.execute(
+            """INSERT INTO idea_nodes(chat_id, label, source_message_id, mention_count, created_at)
+               VALUES(?,?,?,?,?)""",
+            (chat_id, label, msg_id, 1, now)
+        )
+        return cur.lastrowid
+
+    def _upsert_idea_edge(cur, chat_id, src_id, tgt_id):
+        if src_id == tgt_id:
+            return
+        a, b = (src_id, tgt_id) if src_id < tgt_id else (tgt_id, src_id)
+        cur.execute(
+            "SELECT id FROM idea_edges WHERE chat_id=? AND source_node_id=? AND target_node_id=?",
+            (chat_id, a, b)
+        )
+        row = cur.fetchone()
+        if row:
+            cur.execute(
+                "UPDATE idea_edges SET weight=weight+1 WHERE id=?",
+                (row[0],)
+            )
+        else:
+            cur.execute(
+                "INSERT INTO idea_edges(chat_id, source_node_id, target_node_id, weight) VALUES(?,?,?,1)",
+                (chat_id, a, b)
+            )
+
+    def _get_or_create_chat(conn, uid1, uid2):
+        cur = conn.cursor()
+        a, b = (uid1, uid2) if uid1 < uid2 else (uid2, uid1)
+        cur.execute(
+            "SELECT id FROM chats WHERE user1_id=? AND user2_id=?", (a, b)
+        )
+        row = cur.fetchone()
+        if row:
+            return row[0]
+        from datetime import datetime as _dt
+        cur.execute(
+            "INSERT INTO chats(user1_id, user2_id, created_at) VALUES(?,?,?)",
+            (a, b, _dt.utcnow().isoformat())
+        )
+        conn.commit()
+        return cur.lastrowid
+
+    def _friendship_status(cur, uid1, uid2):
+        if uid1 == uid2:
+            return 'self'
+        a, b = (uid1, uid2)
+        cur.execute(
+            """SELECT status, requester_id, receiver_id FROM friend_requests
+               WHERE (requester_id=? AND receiver_id=?) OR (requester_id=? AND receiver_id=?)
+               ORDER BY id DESC LIMIT 1""",
+            (a, b, b, a)
+        )
+        row = cur.fetchone()
+        return row['status'] if row else 'none'
+
+    def _are_friends(cur, uid1, uid2):
+        return _friendship_status(cur, uid1, uid2) == 'accepted'
+
+    def _public_user(user):
+        tag = _ensure_user_tag(user)
+        return {
+            'id': user.id,
+            'username': user.username,
+            'user_tag': tag,
+            'handle': f"{user.username}#{tag}",
+            'display_name': getattr(user, 'display_name', None) or user.username,
+            'photo_path': getattr(user, 'photo_path', None)
+        }
+
+    def _find_user_by_handle(handle):
+        handle = (handle or '').strip()
+        if handle.startswith('@'):
+            handle = handle[1:].strip()
+        if '#' not in handle:
+            return None
+        username, tag = handle.rsplit('#', 1)
+        username = username.strip().lstrip('@')
+        tag = tag.strip()
+        if not username or len(tag) != 4 or not tag.isdigit():
+            return None
+        try:
+            for user in User.query.filter((User.user_tag == None) | (User.user_tag == '')).all():
+                user.user_tag = _generate_user_tag()
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+        return User.query.filter(
+            func.lower(User.username) == username.lower(),
+            User.user_tag == tag
+        ).first()
+
+    # --- Page routes ---
+    @app.route('/constellation')
+    def constellation_page():
+        if 'user' not in session and 'user_id' not in session:
+            return redirect(url_for('login'))
+        return render_template('constellation.html')
+
+    @app.route('/constellation/<path:other_uid>')
+    def constellation_chat(other_uid):
+        if 'user' not in session and 'user_id' not in session:
+            return redirect(url_for('login'))
+        return render_template('constellation.html', open_uid=other_uid)
+
+    # --- API: current user friendship identity ---
+    @app.route('/api/constellation/me')
+    def constellation_me():
+        if 'user' not in session and 'user_id' not in session:
+            return jsonify({'error': 'auth required'}), 401
+        if _mongo_available():
+            current = _mongo_current_user()
+            if not current:
+                return jsonify({'error': 'auth required'}), 401
+            return jsonify(_mongo_public_user(current))
+        user = db.session.get(User, int(session.get('user_id') or 0))
+        if not user:
+            return jsonify({'error': 'auth required'}), 401
+        return jsonify(_public_user(user))
+
+    # --- API: list accepted friends to DM ---
+    @app.route('/api/constellation/users')
+    def constellation_users():
+        if 'user' not in session and 'user_id' not in session:
+            return jsonify({'error': 'auth required'}), 401
+        if _mongo_available():
+            current = _mongo_current_user()
+            if not current:
+                return jsonify({'error': 'auth required'}), 401
+            mdb = _mongo_db()
+            rows = mdb.friend_requests.find({
+                'status': 'accepted',
+                '$or': [{'requester_key': current['_id']}, {'receiver_key': current['_id']}]
+            }).sort('responded_at', DESCENDING)
+            friend_keys = [r['receiver_key'] if r['requester_key'] == current['_id'] else r['requester_key'] for r in rows]
+            users = list(mdb.users.find({'_id': {'$in': friend_keys}}).sort('username_lc', ASCENDING))
+            return jsonify([_mongo_public_user(u) for u in users])
+        me = int(session.get('user_id') or 0)
+        try:
+            dbp = _constellation_db_path()
+            conn = sqlite3.connect(dbp)
+            conn.row_factory = sqlite3.Row
+            _ensure_constellation_tables(conn)
+            cur = conn.cursor()
+            cur.execute(
+                """SELECT requester_id, receiver_id FROM friend_requests
+                   WHERE status='accepted' AND (requester_id=? OR receiver_id=?)
+                   ORDER BY responded_at DESC, created_at DESC""",
+                (me, me)
+            )
+            friend_ids = [r['receiver_id'] if r['requester_id'] == me else r['requester_id'] for r in cur.fetchall()]
+            conn.close()
+            if not friend_ids:
+                return jsonify([])
+            users = User.query.filter(User.id.in_(friend_ids)).order_by(User.username).all()
+            return jsonify([_public_user(u) for u in users])
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/constellation/friends/requests')
+    def constellation_friend_requests():
+        if 'user' not in session and 'user_id' not in session:
+            return jsonify({'error': 'auth required'}), 401
+        if _mongo_available():
+            current = _mongo_current_user()
+            if not current:
+                return jsonify({'error': 'auth required'}), 401
+            mdb = _mongo_db()
+            rows = mdb.friend_requests.find({
+                'status': 'pending',
+                '$or': [{'requester_key': current['_id']}, {'receiver_key': current['_id']}]
+            }).sort('created_at', DESCENDING)
+            requests = []
+            for row in rows:
+                other_key = row['requester_key'] if row['receiver_key'] == current['_id'] else row['receiver_key']
+                other = mdb.users.find_one({'_id': other_key})
+                if not other:
+                    continue
+                requests.append({
+                    'id': str(row['_id']),
+                    'direction': 'incoming' if row['receiver_key'] == current['_id'] else 'outgoing',
+                    'user': _mongo_public_user(other)
+                })
+            return jsonify(requests)
+        me = int(session.get('user_id') or 0)
+        try:
+            dbp = _constellation_db_path()
+            conn = sqlite3.connect(dbp)
+            conn.row_factory = sqlite3.Row
+            _ensure_constellation_tables(conn)
+            cur = conn.cursor()
+            cur.execute(
+                """SELECT * FROM friend_requests
+                   WHERE status='pending' AND (requester_id=? OR receiver_id=?)
+                   ORDER BY created_at DESC""",
+                (me, me)
+            )
+            requests = []
+            for row in cur.fetchall():
+                other_id = row['requester_id'] if row['receiver_id'] == me else row['receiver_id']
+                other = db.session.get(User, other_id)
+                if not other:
+                    continue
+                item = dict(row)
+                item['direction'] = 'incoming' if row['receiver_id'] == me else 'outgoing'
+                item['user'] = _public_user(other)
+                requests.append(item)
+            conn.close()
+            return jsonify(requests)
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/constellation/friends/request', methods=['POST'])
+    def constellation_send_friend_request():
+        if 'user' not in session and 'user_id' not in session:
+            return jsonify({'error': 'auth required'}), 401
+        if _mongo_available():
+            current = _mongo_current_user()
+            if not current:
+                return jsonify({'error': 'auth required'}), 401
+            data = request.get_json(silent=True) or {}
+            handle = (data.get('handle') or '').strip()
+            if '#' not in handle:
+                return jsonify({'error': 'Enter the full username#0000'}), 400
+            target = _mongo_find_user_by_handle(handle)
+            if not target:
+                return jsonify({'error': 'No user found with that tag'}), 404
+            if target['_id'] == current['_id']:
+                return jsonify({'error': 'You cannot add yourself'}), 400
+            from datetime import datetime as _dt
+            mdb = _mongo_db()
+            pair_key = _mongo_pair_key(current['_id'], target['_id'])
+            existing = mdb.friend_requests.find_one({'pair_key': pair_key})
+            if existing and existing.get('status') == 'accepted':
+                return jsonify({'success': True, 'status': 'accepted', 'message': 'Already friends'})
+            if existing and existing.get('status') == 'pending':
+                return jsonify({'success': True, 'status': 'pending', 'message': 'Friend request already pending'})
+            mdb.friend_requests.update_one(
+                {'pair_key': pair_key},
+                {'$set': {
+                    'pair_key': pair_key,
+                    'requester_key': current['_id'],
+                    'receiver_key': target['_id'],
+                    'status': 'pending',
+                    'created_at': _dt.utcnow().isoformat(),
+                    'responded_at': None
+                }},
+                upsert=True
+            )
+            return jsonify({'success': True, 'status': 'pending'})
+        me = int(session.get('user_id') or 0)
+        data = request.get_json(silent=True) or {}
+        handle = (data.get('handle') or '').strip()
+        if '#' not in handle:
+            return jsonify({'error': 'Enter the full username#0000'}), 400
+        if os.environ.get('VERCEL') == '1' and not os.getenv('DATABASE_URL'):
+            return jsonify({
+                'error': 'Friend lookup needs a shared DATABASE_URL on Vercel. Local SQLite in /tmp is not shared between users.'
+            }), 503
+        target = _find_user_by_handle(handle)
+        if not target:
+            return jsonify({'error': 'No user found with that tag'}), 404
+        if target.id == me:
+            return jsonify({'error': 'You cannot add yourself'}), 400
+        from datetime import datetime as _dt
+        try:
+            dbp = _constellation_db_path()
+            conn = sqlite3.connect(dbp)
+            conn.row_factory = sqlite3.Row
+            _ensure_constellation_tables(conn)
+            cur = conn.cursor()
+            status = _friendship_status(cur, me, target.id)
+            if status == 'accepted':
+                conn.close()
+                return jsonify({'success': True, 'status': 'accepted', 'message': 'Already friends'})
+            if status == 'pending':
+                conn.close()
+                return jsonify({'success': True, 'status': 'pending', 'message': 'Friend request already pending'})
+            cur.execute(
+                """INSERT OR REPLACE INTO friend_requests(requester_id, receiver_id, status, created_at, responded_at)
+                   VALUES(?,?,?,?,NULL)""",
+                (me, target.id, 'pending', _dt.utcnow().isoformat())
+            )
+            conn.commit()
+            conn.close()
+            return jsonify({'success': True, 'status': 'pending'})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/constellation/friends/respond', methods=['POST'])
+    def constellation_respond_friend_request():
+        if 'user' not in session and 'user_id' not in session:
+            return jsonify({'error': 'auth required'}), 401
+        if _mongo_available():
+            current = _mongo_current_user()
+            if not current:
+                return jsonify({'error': 'auth required'}), 401
+            data = request.get_json(silent=True) or {}
+            req_id = (data.get('request_id') or '').strip()
+            action = (data.get('action') or '').strip().lower()
+            if action not in ('accept', 'decline'):
+                return jsonify({'error': 'action must be accept or decline'}), 400
+            from bson import ObjectId
+            from bson.errors import InvalidId
+            from datetime import datetime as _dt
+            mdb = _mongo_db()
+            try:
+                request_oid = ObjectId(req_id)
+            except (InvalidId, TypeError):
+                return jsonify({'error': 'request not found'}), 404
+            row = mdb.friend_requests.find_one({'_id': request_oid, 'receiver_key': current['_id'], 'status': 'pending'})
+            if not row:
+                return jsonify({'error': 'request not found'}), 404
+            status = 'accepted' if action == 'accept' else 'declined'
+            mdb.friend_requests.update_one({'_id': row['_id']}, {'$set': {'status': status, 'responded_at': _dt.utcnow().isoformat()}})
+            if status == 'accepted':
+                chat_id = _mongo_chat_id(row['requester_key'], row['receiver_key'])
+                mdb.chats.update_one(
+                    {'chat_id': chat_id},
+                    {'$setOnInsert': {'chat_id': chat_id, 'participants': sorted([row['requester_key'], row['receiver_key']]), 'created_at': _dt.utcnow().isoformat()}},
+                    upsert=True
+                )
+            return jsonify({'success': True, 'status': status})
+        me = int(session.get('user_id') or 0)
+        data = request.get_json(silent=True) or {}
+        req_id = int(data.get('request_id') or 0)
+        action = (data.get('action') or '').strip().lower()
+        if action not in ('accept', 'decline'):
+            return jsonify({'error': 'action must be accept or decline'}), 400
+        from datetime import datetime as _dt
+        try:
+            dbp = _constellation_db_path()
+            conn = sqlite3.connect(dbp)
+            conn.row_factory = sqlite3.Row
+            _ensure_constellation_tables(conn)
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM friend_requests WHERE id=? AND receiver_id=? AND status='pending'", (req_id, me))
+            req_row = cur.fetchone()
+            if not req_row:
+                conn.close()
+                return jsonify({'error': 'request not found'}), 404
+            status = 'accepted' if action == 'accept' else 'declined'
+            cur.execute(
+                "UPDATE friend_requests SET status=?, responded_at=? WHERE id=?",
+                (status, _dt.utcnow().isoformat(), req_id)
+            )
+            if status == 'accepted':
+                _get_or_create_chat(conn, req_row['requester_id'], req_row['receiver_id'])
+            conn.commit()
+            conn.close()
+            return jsonify({'success': True, 'status': status})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    # --- API: get or create chat id ---
+    @app.route('/api/constellation/chat/<path:other_uid>')
+    def constellation_get_chat(other_uid):
+        if 'user' not in session and 'user_id' not in session:
+            return jsonify({'error': 'auth required'}), 401
+        if _mongo_available():
+            current = _mongo_current_user()
+            if not current:
+                return jsonify({'error': 'auth required'}), 401
+            other = _mongo_db().users.find_one({'_id': _mongo_key(other_uid)})
+            if not other:
+                return jsonify({'error': 'user not found'}), 404
+            if not _mongo_are_friends(current['_id'], other['_id']):
+                return jsonify({'error': 'friend request must be accepted before chatting'}), 403
+            from datetime import datetime as _dt
+            chat_id = _mongo_chat_id(current['_id'], other['_id'])
+            _mongo_db().chats.update_one(
+                {'chat_id': chat_id},
+                {'$setOnInsert': {'chat_id': chat_id, 'participants': sorted([current['_id'], other['_id']]), 'created_at': _dt.utcnow().isoformat()}},
+                upsert=True
+            )
+            return jsonify({'chat_id': chat_id})
+        
+        other_uid = int(other_uid)
+        me = int(session.get('user_id') or 0)
+        if other_uid == me:
+            return jsonify({'error': 'choose another user to start a chat'}), 400
+        if not db.session.get(User, other_uid):
+            return jsonify({'error': 'user not found'}), 404
+        try:
+            # Check if users are friends (SQLAlchemy-based)
+            # For now, we'll allow any two users to chat if they exist
+            # In the future, you may want to add a friend verification check here
+            
+            # Get or create chat using SQLAlchemy
+            chat = ConstellationChat.query.filter(
+                db.or_(
+                    db.and_(ConstellationChat.user1_id == me, ConstellationChat.user2_id == other_uid),
+                    db.and_(ConstellationChat.user1_id == other_uid, ConstellationChat.user2_id == me)
+                )
+            ).first()
+            
+            if not chat:
+                from datetime import datetime as _dt
+                # Create new chat with user1_id < user2_id for consistency
+                user1_id = min(me, other_uid)
+                user2_id = max(me, other_uid)
+                chat = ConstellationChat(
+                    user1_id=user1_id,
+                    user2_id=user2_id,
+                    created_at=_dt.utcnow().isoformat()
+                )
+                db.session.add(chat)
+                db.session.commit()
+            
+            return jsonify({'chat_id': chat.id})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 500
+
+    # --- API: load messages for a chat ---
+    @app.route('/api/constellation/messages/<path:chat_id>')
+    def constellation_messages(chat_id):
+        if 'user' not in session and 'user_id' not in session:
+            return jsonify({'error': 'auth required'}), 401
+        if _mongo_available():
+            current = _mongo_current_user()
+            if not current:
+                return jsonify({'error': 'MongoDB is unavailable on this Vercel instance. Check MONGODB_URI and Atlas network access.'}), 503
+            mdb = _mongo_db()
+            chat = mdb.chats.find_one({'chat_id': chat_id, 'participants': current['_id']})
+            if not chat:
+                return jsonify({'error': 'forbidden'}), 403
+            since = request.args.get('since_id', '')
+            query = {'chat_id': chat_id}
+            if since and since != '0':
+                from bson import ObjectId
+                from bson.errors import InvalidId
+                try:
+                    query['_id'] = {'$gt': ObjectId(since)}
+                except (InvalidId, TypeError):
+                    pass
+            rows = []
+            for r in mdb.messages.find(query).sort('created_at', ASCENDING).limit(100):
+                rows.append({
+                    'id': str(r['_id']),
+                    # sender_id matches myKey (MongoDB _id = username string)
+                    'sender_id': r.get('sender_key'),
+                    'content': r.get('content'),
+                    'created_at': r.get('created_at'),
+                    'file_url': r.get('file_url'),
+                    'file_name': r.get('file_name'),
+                    'file_type': r.get('file_type'),
+                })
+            return jsonify(rows)
+        
+        # Use SQLAlchemy models
+        me = int(session.get('user_id') or 0)
+        try:
+            chat_id = int(chat_id)
+            # Verify membership
+            chat = ConstellationChat.query.get(chat_id)
+            if not chat or me not in (chat.user1_id, chat.user2_id):
+                return jsonify({'error': 'forbidden'}), 403
+            
+            since = request.args.get('since_id', 0, type=int)
+            msgs = ConstellationMessage.query.filter(
+                ConstellationMessage.chat_id == chat_id,
+                ConstellationMessage.id > since
+            ).order_by(ConstellationMessage.id.asc()).limit(100).all()
+            
+            rows = []
+            for msg in msgs:
+                d = {
+                    'id': msg.id,
+                    'sender_id': msg.sender_id,
+                    'content': msg.content,
+                    'created_at': msg.created_at,
+                    'file_path': msg.file_path,
+                    'file_name': msg.file_name,
+                    'file_type': msg.file_type
+                }
+                if msg.file_path:
+                    d['file_url'] = url_for('static', filename=msg.file_path) if not msg.file_path.startswith('/api/') else msg.file_path
+                rows.append(d)
+            
+            return jsonify(rows)
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    # --- API: send message ---
+    @app.route('/api/constellation/send', methods=['POST'])
+    def constellation_send():
+        if 'user' not in session and 'user_id' not in session:
+            return jsonify({'error': 'auth required'}), 401
+        data = request.get_json(silent=True) or {}
+        chat_id_raw = data.get('chat_id') or ''
+        content = (data.get('content') or '').strip()
+        if not chat_id_raw or not content:
+            return jsonify({'error': 'chat_id and content required'}), 400
+        if _mongo_available():
+            current = _mongo_current_user()
+            if not current:
+                return jsonify({'error': 'MongoDB is unavailable on this Vercel instance. Check MONGODB_URI and Atlas network access.'}), 503
+            mdb = _mongo_db()
+            chat_id = str(chat_id_raw)
+            chat = mdb.chats.find_one({'chat_id': chat_id, 'participants': current['_id']})
+            if not chat:
+                return jsonify({'error': 'forbidden'}), 403
+            from datetime import datetime as _dt
+            now = _dt.utcnow().isoformat()
+            inserted = mdb.messages.insert_one({'chat_id': chat_id, 'sender_key': current['_id'], 'content': content, 'created_at': now})
+            topics = _extract_topics(content)
+            edges = []
+            for i in range(len(topics)):
+                for j in range(i + 1, len(topics)):
+                    edges.append((topics[i], topics[j]))
+            _mongo_upsert_graph('chat', chat_id, topics, edges)
+            return jsonify({'success': True, 'id': str(inserted.inserted_id), 'topics_found': topics})
+        
+        # Use SQLAlchemy models for persistence
+        me = int(session.get('user_id') or 0)
+        chat_id = int(chat_id_raw)
+        from datetime import datetime as _dt
+        try:
+            # Verify membership using SQLAlchemy models
+            chat = ConstellationChat.query.get(chat_id)
+            if not chat or me not in (chat.user1_id, chat.user2_id):
+                return jsonify({'error': 'forbidden'}), 403
+            
+            now = _dt.utcnow().isoformat()
+            msg = ConstellationMessage(
+                chat_id=chat.id,
+                sender_id=me,
+                content=content,
+                created_at=now
+            )
+            db.session.add(msg)
+            db.session.flush()  # Get the message ID
+            msg_id = msg.id
+            db.session.commit()
+            
+            # Topic extraction + graph update
+            topics = _extract_topics(content)
+            node_ids = []
+            for topic in topics:
+                node = ConstellationNode.query.filter_by(
+                    chat_id=chat.id,
+                    label=topic
+                ).first()
+                if not node:
+                    node = ConstellationNode(
+                        chat_id=chat.id,
+                        label=topic,
+                        node_type='topic',
+                        source_message_id=msg_id,
+                        mention_count=1,
+                        created_at=now
+                    )
+                    db.session.add(node)
+                    db.session.flush()
+                else:
+                    node.mention_count += 1
+                    db.session.add(node)
+                    db.session.flush()
+                node_ids.append(node.id)
+            
+            # Connect all co-occurring topics in the same message
+            for i in range(len(node_ids)):
+                for j in range(i + 1, len(node_ids)):
+                    edge = ConstellationEdge.query.filter_by(
+                        chat_id=chat.id,
+                        source_node_id=node_ids[i],
+                        target_node_id=node_ids[j]
+                    ).first()
+                    if edge:
+                        edge.weight += 1
+                    else:
+                        edge = ConstellationEdge(
+                            chat_id=chat.id,
+                            source_node_id=node_ids[i],
+                            target_node_id=node_ids[j],
+                            weight=1
+                        )
+                        db.session.add(edge)
+            
+            db.session.commit()
+            return jsonify({'success': True, 'id': msg_id, 'topics_found': topics})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 500
+
+    # --- Ideas mode: messages ---
+    @app.route('/api/constellation/ideas/messages/<path:chat_id>')
+    def constellation_idea_messages(chat_id):
+        if 'user' not in session and 'user_id' not in session:
+            return jsonify({'error': 'auth required'}), 401
+        if _mongo_available():
+            current = _mongo_current_user()
+            if not current:
+                return jsonify({'error': 'MongoDB is unavailable on this Vercel instance. Check MONGODB_URI and Atlas network access.'}), 503
+            mdb = _mongo_db()
+            chat = mdb.chats.find_one({'chat_id': chat_id, 'participants': current['_id']})
+            if not chat:
+                return jsonify({'error': 'forbidden'}), 403
+            since = request.args.get('since_id', '')
+            query = {'chat_id': chat_id}
+            if since and since != '0':
+                from bson import ObjectId
+                from bson.errors import InvalidId
+                try:
+                    query['_id'] = {'$gt': ObjectId(since)}
+                except (InvalidId, TypeError):
+                    pass
+            rows = [{
+                'id': str(r['_id']),
+                'sender_id': r.get('sender_key'),
+                'content': r.get('content'),
+                'created_at': r.get('created_at'),
+                'file_url': r.get('file_url'),
+                'file_name': r.get('file_name'),
+                'file_type': r.get('file_type'),
+            } for r in mdb.idea_messages.find(query).sort('created_at', ASCENDING).limit(100)]
+            return jsonify(rows)
+        
+        # Use SQLAlchemy models
+        chat_id = int(chat_id)
+        me = int(session.get('user_id') or 0)
+        try:
+            # Verify membership
+            chat = ConstellationChat.query.get(chat_id)
+            if not chat or me not in (chat.user1_id, chat.user2_id):
+                return jsonify({'error': 'forbidden'}), 403
+            
+            since = request.args.get('since_id', 0, type=int)
+            msgs = IdeaMessage.query.filter(
+                IdeaMessage.chat_id == chat_id,
+                IdeaMessage.id > since
+            ).order_by(IdeaMessage.id.asc()).limit(100).all()
+            
+            rows = []
+            for msg in msgs:
+                rows.append({
+                    'id': msg.id,
+                    'sender_id': msg.sender_id,
+                    'content': msg.content,
+                    'created_at': msg.created_at
+                })
+            
+            return jsonify(rows)
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/constellation/ideas/send', methods=['POST'])
+    def constellation_idea_send():
+        if 'user' not in session and 'user_id' not in session:
+            return jsonify({'error': 'auth required'}), 401
+        data = request.get_json(silent=True) or {}
+        chat_id_raw = data.get('chat_id') or ''
+        content = (data.get('content') or '').strip()
+        if not chat_id_raw or not content:
+            return jsonify({'error': 'chat_id and content required'}), 400
+        if _mongo_available():
+            current = _mongo_current_user()
+            if not current:
+                return jsonify({'error': 'MongoDB is unavailable on this Vercel instance. Check MONGODB_URI and Atlas network access.'}), 503
+            mdb = _mongo_db()
+            chat_id = str(chat_id_raw)
+            chat = mdb.chats.find_one({'chat_id': chat_id, 'participants': current['_id']})
+            if not chat:
+                return jsonify({'error': 'forbidden'}), 403
+            from datetime import datetime as _dt
+            now = _dt.utcnow().isoformat()
+            inserted = mdb.idea_messages.insert_one({'chat_id': chat_id, 'sender_key': current['_id'], 'content': content, 'created_at': now})
+            recent = list(mdb.messages.find({'chat_id': chat_id}).sort('created_at', DESCENDING).limit(16))
+            recent += list(mdb.idea_messages.find({'chat_id': chat_id}).sort('created_at', DESCENDING).limit(16))
+            context_messages = sorted([
+                {'sender_id': r.get('sender_key'), 'content': r.get('content'), 'created_at': r.get('created_at'), 'mode': 'ideas' if 'idea' in str(r.get('_id')) else 'chat'}
+                for r in recent
+            ], key=lambda r: r.get('created_at') or '')
+            ai_graph = _extract_idea_graph_with_ai(context_messages)
+            topics = ai_graph['nodes'] if ai_graph else _extract_topics(content)
+            edges = ai_graph['edges'] if ai_graph else [(topics[i], topics[j]) for i in range(len(topics)) for j in range(i + 1, len(topics))]
+            _mongo_upsert_graph('ideas', chat_id, topics, edges)
+            return jsonify({'success': True, 'id': str(inserted.inserted_id), 'topics_found': topics, 'ai_graph': bool(ai_graph)})
+        
+        # Use SQLAlchemy models
+        me = int(session.get('user_id') or 0)
+        chat_id = int(chat_id_raw)
+        from datetime import datetime as _dt
+        try:
+            # Verify membership
+            chat = ConstellationChat.query.get(chat_id)
+            if not chat or me not in (chat.user1_id, chat.user2_id):
+                return jsonify({'error': 'forbidden'}), 403
+            
+            now = _dt.utcnow().isoformat()
+            msg = IdeaMessage(
+                chat_id=chat.id,
+                sender_id=me,
+                content=content,
+                created_at=now
+            )
+            db.session.add(msg)
+            db.session.flush()
+            msg_id = msg.id
+            db.session.commit()
+            
+            # Topic extraction + graph update
+            topics = _extract_topics(content)
+            node_ids = []
+            for topic in topics:
+                node = IdeaNode.query.filter_by(
+                    chat_id=chat.id,
+                    label=topic
+                ).first()
+                if not node:
+                    node = IdeaNode(
+                        chat_id=chat.id,
+                        label=topic,
+                        source_message_id=msg_id,
+                        mention_count=1,
+                        created_at=now
+                    )
+                    db.session.add(node)
+                    db.session.flush()
+                else:
+                    node.mention_count += 1
+                    db.session.add(node)
+                    db.session.flush()
+                node_ids.append(node.id)
+            
+            # Connect all co-occurring topics in the same message
+            for i in range(len(node_ids)):
+                for j in range(i + 1, len(node_ids)):
+                    edge = IdeaEdge.query.filter_by(
+                        chat_id=chat.id,
+                        source_node_id=node_ids[i],
+                        target_node_id=node_ids[j]
+                    ).first()
+                    if edge:
+                        edge.weight += 1
+                    else:
+                        edge = IdeaEdge(
+                            chat_id=chat.id,
+                            source_node_id=node_ids[i],
+                            target_node_id=node_ids[j],
+                            weight=1
+                        )
+                        db.session.add(edge)
+            
+            db.session.commit()
+            return jsonify({'success': True, 'id': msg_id, 'topics_found': topics, 'ai_graph': False})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/constellation/ideas/graph/<path:chat_id>')
+    def constellation_idea_graph(chat_id):
+        if 'user' not in session and 'user_id' not in session:
+            return jsonify({'error': 'auth required'}), 401
+        if _mongo_available():
+            current = _mongo_current_user()
+            if not current:
+                return jsonify({'error': 'MongoDB is unavailable on this Vercel instance. Check MONGODB_URI and Atlas network access.'}), 503
+            mdb = _mongo_db()
+            chat = mdb.chats.find_one({'chat_id': chat_id, 'participants': current['_id']})
+            if not chat:
+                return jsonify({'error': 'forbidden'}), 403
+            return jsonify(_mongo_graph('ideas', chat_id))
+        
+        # Use SQLAlchemy models
+        chat_id = int(chat_id)
+        me = int(session.get('user_id') or 0)
+        try:
+            # Verify membership
+            chat = ConstellationChat.query.get(chat_id)
+            if not chat or me not in (chat.user1_id, chat.user2_id):
+                return jsonify({'error': 'forbidden'}), 403
+            
+            # Get idea nodes
+            nodes_query = IdeaNode.query.filter_by(chat_id=chat_id).order_by(IdeaNode.mention_count.desc()).all()
+            nodes = []
+            for n in nodes_query:
+                nodes.append({
+                    'id': n.id,
+                    'label': n.label,
+                    'node_type': 'idea',
+                    'mention_count': n.mention_count
+                })
+            
+            # Get idea edges
+            edges_query = IdeaEdge.query.filter_by(chat_id=chat_id).all()
+            edges = []
+            for e in edges_query:
+                edges.append({
+                    'source_node_id': e.source_node_id,
+                    'target_node_id': e.target_node_id,
+                    'weight': e.weight
+                })
+            
+            return jsonify({'nodes': nodes, 'edges': edges})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/constellation/file/<file_id>')
+    def constellation_file(file_id):
+        if not _mongo_available():
+            return "MongoDB not available", 503
+        mdb = _mongo_db()
+        import gridfs
+        from bson import ObjectId
+        fs = gridfs.GridFS(mdb)
+        try:
+            grid_out = fs.get(ObjectId(file_id))
+            from flask import send_file
+            import io
+            return send_file(io.BytesIO(grid_out.read()), mimetype=grid_out.content_type, download_name=grid_out.filename)
+        except Exception as e:
+            return "File not found", 404
+
+    # --- API: upload file ---
+    @app.route('/api/constellation/upload', methods=['POST'])
+    def constellation_upload():
+        if 'user' not in session and 'user_id' not in session:
+            return jsonify({'error': 'auth required'}), 401
+        me = int(session.get('user_id') or 0)
+        chat_id_raw = (request.form.get('chat_id') or '').strip()
+        file = request.files.get('file')
+        if not chat_id_raw or not file or not getattr(file, 'filename', ''):
+            return jsonify({'error': 'chat_id and file required'}), 400
+
+        fname = secure_filename(file.filename)
+        ext = fname.rsplit('.', 1)[-1].lower() if '.' in fname else ''
+        allowed = {'pdf', 'png', 'jpg', 'jpeg', 'txt', 'doc', 'docx', 'xls', 'xlsx', 'webp'}
+        if ext not in allowed:
+            return jsonify({'error': f'File type .{ext} not allowed'}), 400
+        file_type = 'pdf' if ext == 'pdf' else ('image' if ext in ('png', 'jpg', 'jpeg', 'webp') else 'note')
+
+        if _mongo_available():
+            # --- MongoDB / Vercel path: upload via Cloudinary ---
+            current = _mongo_current_user()
+            if not current:
+                return jsonify({'error': 'auth required'}), 401
+            if not _cloudinary_configured():
+                return jsonify({
+                    'error': 'File uploads require Cloudinary to be configured. '
+                             'Add CLOUDINARY_URL to your Vercel environment variables '
+                             '(free at cloudinary.com).'
+                }), 503
+            mdb = _mongo_db()
+            chat_id = str(chat_id_raw)
+            chat = mdb.chats.find_one({'chat_id': chat_id, 'participants': current['_id']})
+            if not chat:
+                return jsonify({'error': 'forbidden'}), 403
+            # Determine Cloudinary resource type
+            resource_type = 'image' if file_type == 'image' else 'raw'
+            file_url, err = _cloudinary_upload(file, folder='constellation', resource_type=resource_type)
+            if err:
+                return jsonify({'error': f'Upload failed: {err}'}), 500
+            from datetime import datetime as _dt
+            now = _dt.utcnow().isoformat()
+            topics = _extract_topics(fname.replace('_', ' ').replace('-', ' '))
+            edges = [(topics[i], topics[j]) for i in range(len(topics)) for j in range(i + 1, len(topics))]
+            inserted = mdb.messages.insert_one({
+                'chat_id': chat_id,
+                'sender_key': current['_id'],
+                'content': None,
+                'file_url': file_url,
+                'file_name': file.filename,
+                'file_type': file_type,
+                'created_at': now
+            })
+            # ---- Upsert file node + topic nodes + edges in graph ----
+            file_label = file.filename
+            file_label_lc = file_label.lower()
+            # Upsert the file node
+            mdb.graph_nodes.update_one(
+                {'chat_id': chat_id, 'mode': 'chat', 'label_lc': file_label_lc},
+                {'$setOnInsert': {'chat_id': chat_id, 'mode': 'chat', 'label': file_label, 'node_type': 'file'},
+                 '$inc': {'mention_count': 1}},
+                upsert=True
+            )
+            # Upsert topic nodes and connect each one to the file node via an edge
+            normalized_name = fname.lower().replace('_', ' ').replace('-', ' ')
+            topics = _extract_topics(normalized_name)
+            if topics:
+                for topic in _dedupe_labels(topics, max_items=6):
+                    topic_lc = topic.lower()
+                    mdb.graph_nodes.update_one(
+                        {'chat_id': chat_id, 'mode': 'chat', 'label_lc': topic_lc},
+                        {'$setOnInsert': {'chat_id': chat_id, 'mode': 'chat', 'label': topic, 'node_type': 'topic'},
+                         '$inc': {'mention_count': 1}},
+                        upsert=True
+                    )
+                    # Edge between file node and topic node (sorted for uniqueness)
+                    a, b = sorted([file_label_lc, topic_lc])
+                    mdb.graph_edges.update_one(
+                        {'chat_id': chat_id, 'mode': 'chat', 'source_label_lc': a, 'target_label_lc': b},
+                        {'$setOnInsert': {'chat_id': chat_id, 'mode': 'chat',
+                                          'source_label': a, 'target_label': b},
+                         '$inc': {'weight': 1}},
+                        upsert=True
+                    )
+            else:
+                # Fallback: connect file to a generic "Shared Files" hub node
+                hub_lc = 'shared files'
+                mdb.graph_nodes.update_one(
+                    {'chat_id': chat_id, 'mode': 'chat', 'label_lc': hub_lc},
+                    {'$setOnInsert': {'chat_id': chat_id, 'mode': 'chat', 'label': 'Shared Files', 'node_type': 'topic'},
+                     '$inc': {'mention_count': 1}},
+                    upsert=True
+                )
+                a, b = sorted([file_label_lc, hub_lc])
+                mdb.graph_edges.update_one(
+                    {'chat_id': chat_id, 'mode': 'chat', 'source_label_lc': a, 'target_label_lc': b},
+                    {'$setOnInsert': {'chat_id': chat_id, 'mode': 'chat',
+                                      'source_label': a, 'target_label': b},
+                     '$inc': {'weight': 1}},
+                    upsert=True
+                )
+            return jsonify({'success': True, 'id': str(inserted.inserted_id), 'file_url': file_url})
+
+        # --- SQLite / local path ---
+        chat_id = int(chat_id_raw)
+        from datetime import datetime as _dt
+        try:
+            # Verify membership using SQLAlchemy models
+            chat = ConstellationChat.query.get(chat_id)
+            if not chat or me not in (chat.user1_id, chat.user2_id):
+                return jsonify({'error': 'forbidden'}), 403
+            
+            # Save file (with Vercel read-only filesystem fallback)
+            upload_dir = os.path.join(app.static_folder, 'uploads', 'constellation')
+            now = _dt.utcnow()
+            unique_name = f"c{chat_id}_u{me}_{int(now.timestamp())}_{fname}"
+            abs_path = os.path.join(upload_dir, unique_name)
+
+            try:
+                os.makedirs(upload_dir, exist_ok=True)
+                file.save(abs_path)
+            except OSError:
+                pass  # Ignore Read-Only File System errors on Vercel
+
+            rel_path = 'uploads/constellation/' + unique_name
+            now_str = now.isoformat()
+            
+            # Insert message
+            msg = ConstellationMessage(
+                chat_id=chat_id,
+                sender_id=me,
+                content=None,
+                file_path=rel_path,
+                file_name=file.filename,
+                file_type=file_type,
+                created_at=now_str
+            )
+            db.session.add(msg)
+            db.session.flush()
+            msg_id = msg.id
+            
+            # Create a file node in the graph
+            node_label = file.filename
+            nid_file = ConstellationNode.query.filter_by(chat_id=chat_id, label=node_label).first()
+            if not nid_file:
+                nid_file = ConstellationNode(chat_id=chat_id, label=node_label, node_type='file', source_message_id=msg_id, mention_count=1, created_at=now_str)
+                db.session.add(nid_file)
+                db.session.flush()
+            else:
+                nid_file.mention_count += 1
+                db.session.add(nid_file)
+                db.session.flush()
+
+            linked_topics = set()
+            normalized_name = file.filename.lower().replace('_', ' ').replace('-', ' ')
+            for topic in _extract_topics(normalized_name):
+                nid_topic = ConstellationNode.query.filter_by(chat_id=chat_id, label=topic).first()
+                if not nid_topic:
+                    nid_topic = ConstellationNode(chat_id=chat_id, label=topic, node_type='topic', source_message_id=msg_id, mention_count=1, created_at=now_str)
+                    db.session.add(nid_topic)
+                    db.session.flush()
+                else:
+                    nid_topic.mention_count += 1
+                    db.session.add(nid_topic)
+                    db.session.flush()
+                
+                # Add edge
+                edge = ConstellationEdge.query.filter_by(chat_id=chat_id, source_node_id=nid_file.id, target_node_id=nid_topic.id).first()
+                if not edge:
+                    edge2 = ConstellationEdge.query.filter_by(chat_id=chat_id, source_node_id=nid_topic.id, target_node_id=nid_file.id).first()
+                    if edge2:
+                        edge2.weight += 1
+                        db.session.add(edge2)
+                    else:
+                        new_edge = ConstellationEdge(chat_id=chat_id, source_node_id=nid_file.id, target_node_id=nid_topic.id, weight=1)
+                        db.session.add(new_edge)
+                else:
+                    edge.weight += 1
+                    db.session.add(edge)
+                
+                linked_topics.add(topic)
+
+            if not linked_topics:
+                nid_hub = ConstellationNode.query.filter_by(chat_id=chat_id, label='Shared Files').first()
+                if not nid_hub:
+                    nid_hub = ConstellationNode(chat_id=chat_id, label='Shared Files', node_type='topic', source_message_id=msg_id, mention_count=1, created_at=now_str)
+                    db.session.add(nid_hub)
+                    db.session.flush()
+                else:
+                    nid_hub.mention_count += 1
+                    db.session.add(nid_hub)
+                    db.session.flush()
+                
+                edge = ConstellationEdge.query.filter_by(chat_id=chat_id, source_node_id=nid_file.id, target_node_id=nid_hub.id).first()
+                if not edge:
+                    edge2 = ConstellationEdge.query.filter_by(chat_id=chat_id, source_node_id=nid_hub.id, target_node_id=nid_file.id).first()
+                    if edge2:
+                        edge2.weight += 1
+                        db.session.add(edge2)
+                    else:
+                        new_edge = ConstellationEdge(chat_id=chat_id, source_node_id=nid_file.id, target_node_id=nid_hub.id, weight=1)
+                        db.session.add(new_edge)
+                else:
+                    edge.weight += 1
+                    db.session.add(edge)
+                    
+            db.session.commit()
+            return jsonify({'success': True, 'id': msg_id, 'file_url': url_for('static', filename=rel_path)})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 500
+
+    # --- API: get graph data for constellation ---
+    @app.route('/api/constellation/graph/<path:chat_id>')
+    def constellation_graph(chat_id):
+        if 'user' not in session and 'user_id' not in session:
+            return jsonify({'error': 'auth required'}), 401
+        if _mongo_available():
+            current = _mongo_current_user()
+            if not current:
+                return jsonify({'error': 'MongoDB is unavailable on this Vercel instance. Check MONGODB_URI and Atlas network access.'}), 503
+            mdb = _mongo_db()
+            chat = mdb.chats.find_one({'chat_id': chat_id, 'participants': current['_id']})
+            if not chat:
+                return jsonify({'error': 'forbidden'}), 403
+            return jsonify(_mongo_graph('chat', chat_id))
+        
+        # Use SQLAlchemy models
+        chat_id = int(chat_id)
+        me = int(session.get('user_id') or 0)
+        try:
+            # Verify membership
+            chat = ConstellationChat.query.get(chat_id)
+            if not chat or me not in (chat.user1_id, chat.user2_id):
+                return jsonify({'error': 'forbidden'}), 403
+            
+            # Get nodes
+            nodes_query = ConstellationNode.query.filter_by(chat_id=chat_id).order_by(ConstellationNode.mention_count.desc()).all()
+            nodes = []
+            for n in nodes_query:
+                nodes.append({
+                    'id': n.id,
+                    'label': n.label,
+                    'node_type': n.node_type,
+                    'mention_count': n.mention_count
+                })
+            
+            # Get edges
+            edges_query = ConstellationEdge.query.filter_by(chat_id=chat_id).all()
+            edges = []
+            for e in edges_query:
+                edges.append({
+                    'source_node_id': e.source_node_id,
+                    'target_node_id': e.target_node_id,
+                    'weight': e.weight
+                })
+            
+            return jsonify({'nodes': nodes, 'edges': edges})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    # --- API: delete a node from the graph ---
+    @app.route('/api/constellation/node/<path:chat_id>/<path:node_id>', methods=['DELETE'])
+    def constellation_delete_node(chat_id, node_id):
+        if 'user' not in session and 'user_id' not in session:
+            return jsonify({'error': 'auth required'}), 401
+
+        if _mongo_available():
+            current = _mongo_current_user()
+            if not current:
+                return jsonify({'error': 'MongoDB is unavailable on this Vercel instance. Check MONGODB_URI and Atlas network access.'}), 503
+            mdb = _mongo_db()
+            chat = mdb.chats.find_one({'chat_id': str(chat_id), 'participants': current['_id']})
+            if not chat:
+                return jsonify({'error': 'forbidden'}), 403
+            mdb.graph_nodes.delete_one({'chat_id': str(chat_id), 'label_lc': str(node_id)})
+            mdb.graph_edges.delete_many({'chat_id': str(chat_id), '$or': [{'source_label_lc': str(node_id)}, {'target_label_lc': str(node_id)}]})
+            return jsonify({'success': True})
+
+        me = int(session.get('user_id') or 0)
+        chat_id = int(chat_id)
+        node_id = int(node_id)
+        try:
+            # Verify membership using SQLAlchemy
+            chat = ConstellationChat.query.get(chat_id)
+            if not chat or me not in (chat.user1_id, chat.user2_id):
+                return jsonify({'error': 'forbidden'}), 403
+            
+            # Delete edges
+            ConstellationEdge.query.filter(
+                db.and_(
+                    ConstellationEdge.chat_id == chat_id,
+                    db.or_(
+                        ConstellationEdge.source_node_id == node_id,
+                        ConstellationEdge.target_node_id == node_id
+                    )
+                )
+            ).delete()
+            
+            # Delete node
+            ConstellationNode.query.filter_by(chat_id=chat_id, id=node_id).delete()
+            
+            db.session.commit()
+            return jsonify({'success': True})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 500
 
     return app
 

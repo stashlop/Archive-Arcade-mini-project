@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Knowledge Constellation - Arcade</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='arcade.css') }}" />
+  <style>
+    :root {
+      --bg-0: #070b10;
+      --bg-1: #0b1220;
+      --panel: rgba(11, 18, 31, 0.88);
+      --panel-soft: rgba(11, 18, 31, 0.72);
+      --line: rgba(255,255,255,0.1);
+      --text: #e7edf7;
+      --muted: #8f9db6;
+      --accent: #1db9ff;
+      --accent-2: #f59e0b;
+      --accent-3: #10b981;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      background: #060b14;
+      color: var(--text);
+      font-family: "Space Grotesk", "Segoe UI", sans-serif;
+      overflow: hidden;
+    }
+
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      background: rgba(5, 9, 15, 0.88);
+      border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(18px);
+    }
+
+    .nav-inner {
+      width: min(100%, 1500px);
+      margin: 0 auto;
+      padding: 0.7rem 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.7rem;
+      color: var(--text);
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    .brand-mark {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #031019;
+      font-weight: 700;
+    }
+
+    .brand-name {
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+
+    .nav-links {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 0.35rem;
+      flex-wrap: wrap;
+    }
+
+    .nav-links a,
+    .nav-greet {
+      display: inline-flex;
+      align-items: center;
+      min-height: 36px;
+      padding: 0.45rem 0.65rem;
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 0.92rem;
+      font-weight: 600;
+      text-decoration: none;
+    }
+
+    .nav-links a:hover {
+      background: rgba(255,255,255,0.08);
+      text-decoration: none;
+    }
+
+    .nav-links .nav-accent {
+      color: #bcecff;
+      background: rgba(29,185,255,0.14);
+      border: 1px solid rgba(29,185,255,0.32);
+    }
+
+    .nav-greet { color: var(--muted); }
+
+    .page-body {
+      display: grid;
+      grid-template-columns: minmax(230px, 280px) minmax(340px, 450px) minmax(460px, 1fr);
+      height: calc(100dvh - 62px);
+      min-height: 560px;
+      border-top: 1px solid rgba(255,255,255,0.04);
+    }
+
+    .sidebar {
+      min-width: 0;
+      background: linear-gradient(180deg, rgba(11,18,31,0.96), rgba(11,18,31,0.78));
+      border-right: 1px solid var(--line);
+      display: flex; flex-direction: column;
+    }
+    .sidebar-header { padding: 1.05rem 1.15rem; border-bottom: 1px solid var(--line); }
+    .sidebar-header h2 { font-family:"Space Grotesk", sans-serif; font-size: 1rem; letter-spacing:.09em; text-transform:uppercase; margin:0 0 .25rem; color:#c4b5fd; }
+    .page-subtitle { color: var(--muted); margin: 0; font-size: .86rem; line-height: 1.35; }
+    .friend-tools { padding: .85rem; border-bottom:1px solid var(--line); display:grid; gap:.65rem; }
+    .friend-code { display:flex; justify-content:space-between; gap:.55rem; align-items:center; padding:.55rem .65rem; border-radius:8px; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1); font-size:.82rem; color:var(--muted); }
+    .friend-code strong { color:#e7edf7; font-size:.9rem; }
+    .friend-form { display:flex; gap:.45rem; }
+    .friend-form input { flex:1; min-width:0; min-height:36px; border-radius:8px; border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.06); color:var(--text); padding:.45rem .55rem; }
+    .friend-form button { min-height:36px; padding:.45rem .65rem; }
+    .friend-status { min-height:18px; font-size:.76rem; color:var(--muted); }
+    .request-list { display:grid; gap:.4rem; }
+    .request-card { padding:.55rem; border-radius:8px; background:rgba(245,158,11,.08); border:1px solid rgba(245,158,11,.22); display:grid; gap:.45rem; }
+    .request-card .request-actions { display:flex; gap:.4rem; }
+    .request-card button { min-height:30px; padding:.35rem .55rem; font-size:.75rem; }
+    .user-list { flex: 1; overflow-y: auto; padding: 0.85rem; }
+    .user-item { display:flex; align-items:center; gap:.8rem; padding:.7rem .75rem; border-radius:8px; cursor:pointer; border:1px solid transparent; margin-bottom:.35rem; transition:background .16s ease, border-color .16s ease; }
+    .user-item:hover { background: rgba(29,185,255,0.12); border-color: rgba(29,185,255,0.35); }
+    .user-item.active { background: rgba(29,185,255,0.2); border-color: rgba(29,185,255,0.5); }
+    .c-avatar { flex:0 0 auto; width:42px; height:42px; border-radius:50%; background: linear-gradient(135deg, #6d5dfc, #3f7cff); display:flex; align-items:center; justify-content:center; font-weight:700; color:#fff; overflow:hidden; box-shadow:0 8px 24px rgba(63,124,255,.2); }
+    .c-avatar img { width:100%; height:100%; object-fit:cover; }
+    .user-info { min-width:0; }
+    .user-info .name { font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .user-info .sub { font-size:.8rem; color: var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+    .chat-panel { min-width:0; min-height:0; height:100%; display:flex; flex-direction:column; border-right:1px solid var(--line); background: rgba(7,12,21,0.84); overflow:hidden; }
+    .chat-header { flex:0 0 auto; min-height:82px; padding:1rem 1.1rem; border-bottom:1px solid var(--line); display:flex; gap:0.85rem; align-items:center; }
+    .chat-meta { flex:1; }
+    .chat-name { font-weight:700; font-size:1rem; }
+    .chat-sub { color: var(--muted); font-size: 0.8rem; }
+    .mode-toggle { display:flex; gap:0.35rem; margin-top:0.7rem; }
+    .mode-btn { min-height:32px; padding:0.35rem 0.75rem; border-radius:8px; border:1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.05); color: var(--text); font-size:0.78rem; cursor:pointer; }
+    .mode-btn.active { background: rgba(29,185,255,0.25); border-color: rgba(29,185,255,0.5); }
+
+    .messages { flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; padding:1rem; display:flex; flex-direction:column; gap:0.65rem; scroll-behavior:smooth; overscroll-behavior:contain; }
+    .placeholder-msg { min-height:100%; text-align:center; color: var(--muted); padding:3rem 1.5rem; font-size:.95rem; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.7rem; }
+    .placeholder-icon { width:56px; height:56px; border-radius:18px; display:grid; place-items:center; font-size:1.4rem; background:rgba(255,255,255,.06); border:1px solid var(--line); }
+    .msg-bubble { max-width:82%; min-width:0; padding:.55rem .85rem; border-radius:14px; font-size:.88rem; line-height:1.5; overflow-wrap:anywhere; word-break:break-word; animation:fadeUp .2s ease; }
+    .msg-bubble.sent { align-self:flex-end; background: linear-gradient(135deg, var(--accent), #5eead4); color:#02131b; border-bottom-right-radius:4px; }
+    .msg-bubble.recv { align-self:flex-start; background: rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12); border-bottom-left-radius:4px; }
+    .msg-bubble.idea { background: rgba(245,158,11,0.18); border:1px solid rgba(245,158,11,0.4); color: #ffe9c2; }
+    .msg-time { font-size:.65rem; opacity:.6; margin-top:.2rem; text-align:right; }
+    .msg-file { display:flex; align-items:center; gap:.5rem; min-width:0; max-width:100%; padding:.5rem .7rem; border-radius:10px; background: rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,.12); cursor:pointer; text-decoration:none; color:inherit; transition:background .2s; }
+    .msg-file:hover { background: rgba(29,185,255,0.15); }
+    .file-icon { flex:0 0 auto; font-size:.72rem; font-weight:700; opacity:.9; }
+    .file-info { min-width:0; flex:1; }
+    .file-info .fn { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
+    .file-info .ft { font-size:.68rem; opacity:.65; }
+
+    .chat-input-area { flex:0 0 auto; padding:.85rem 1rem; border-top:1px solid var(--line); background: rgba(4,8,14,.92); display:flex; flex-direction:column; gap:.5rem; }
+    .input-row { display:flex; gap:.5rem; align-items:flex-end; }
+    #msg-input { flex:1; min-height:42px; max-height:120px; resize:none; }
+    .btn, button { font-family:"Space Grotesk", sans-serif; border-radius:8px; border:1px solid transparent; padding:.62rem .85rem; font-weight:700; cursor:pointer; color:var(--text); background:rgba(255,255,255,.07); }
+    .btn:hover, button:hover { background:rgba(255,255,255,.1); }
+    .btn-primary { background:linear-gradient(135deg, var(--accent), #5eead4); color:#031019; }
+    .btn-ghost { border-color:rgba(255,255,255,.15); }
+    button:disabled, textarea:disabled { cursor:not-allowed; opacity:.5; }
+
+    .graph-panel { min-width:0; position:relative; display:flex; flex-direction:column; background: radial-gradient(ellipse at 50% 40%, #0b1a2d 0%, #060b14 72%); }
+    .graph-header { min-height:82px; padding:1rem 1.25rem; border-bottom:1px solid rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:space-between; gap:1rem; }
+    .graph-title { font-weight:700; font-size:1rem; color:#90b4ff; }
+    .graph-sub { font-size:.75rem; color: var(--muted); }
+    .graph-canvas { flex:1; min-height:0; position:relative; overflow:hidden; }
+    #constellation-svg { width:100%; height:100%; display:block; }
+    .empty-graph { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.85rem; color:#4f6d9e; pointer-events:none; text-align:center; }
+    .empty-graph-icon { width:80px; height:80px; border-radius:8px; display:grid; place-items:center; background:linear-gradient(135deg, rgba(29,185,255,.18), rgba(245,158,11,.16)); border:1px solid rgba(255,255,255,.08); color:#bcd8ff; font-size:1.6rem; }
+    .graph-tooltip { position:absolute; background:rgba(10,20,40,.95); border:1px solid rgba(29,185,255,.3); border-radius:8px; padding:.45rem .75rem; font-size:.8rem; color:#e2e8f0; pointer-events:none; display:none; z-index:20; backdrop-filter:blur(8px); max-width:180px; }
+    .graph-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
+    .reset-btn { min-height:36px; padding:.45rem .7rem; border-radius:8px; border:1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.06); color: var(--text); cursor:pointer; }
+
+    .edge { stroke: rgba(125,211,252,0.38); stroke-linecap: round; }
+    .node-core { transition: stroke-width .18s ease, filter .18s ease; }
+
+    @keyframes fadeUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+
+    @media (max-width: 1100px) {
+      body { overflow:auto; }
+      .page-body { grid-template-columns: minmax(220px, 280px) 1fr; height:calc(100dvh - 62px); min-height:560px; }
+      .graph-panel { display:none; }
+    }
+    @media (max-width: 820px) {
+      .nav-inner { align-items:flex-start; flex-direction:column; }
+      .nav-links { justify-content:flex-start; }
+      .page-body { grid-template-columns: 1fr; height:auto; min-height:calc(100dvh - 62px); }
+      .sidebar { max-height:290px; border-right:0; border-bottom:1px solid var(--line); }
+      .chat-panel { height:calc(100dvh - 62px); min-height:560px; border-right:0; }
+      .input-row { flex-wrap:wrap; }
+      #msg-input { flex-basis:100%; }
+      .msg-bubble { max-width:92%; }
+    }
+  </style>
+</head>
+<body>
+  {% include 'partials/header.html' %}
+
+  <div class="page-body">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h2>Constellation</h2>
+        <p class="page-subtitle">Chat - Ideas - Graphs</p>
+      </div>
+      <div class="friend-tools">
+        <div class="friend-code">
+          <span>Your tag</span>
+          <strong id="my-handle">loading...</strong>
+        </div>
+        <form class="friend-form" id="friend-form">
+          <input id="friend-handle" placeholder="username#0000" autocomplete="off" />
+          <button type="submit">Add</button>
+        </form>
+        <div class="friend-status" id="friend-status"></div>
+        <div class="request-list" id="request-list"></div>
+      </div>
+      <div class="user-list" id="user-list">
+        <p class="page-subtitle">Loading...</p>
+      </div>
+    </aside>
+
+    <section class="chat-panel">
+      <div class="chat-header">
+        <div class="c-avatar" id="chat-avatar">?</div>
+        <div class="chat-meta">
+          <div class="chat-name" id="chat-name">Select a friend</div>
+          <div class="chat-sub" id="chat-sub">to start chatting</div>
+          <div class="mode-toggle">
+            <button class="mode-btn active" data-mode="chat" id="mode-chat">Chat</button>
+            <button class="mode-btn" data-mode="ideas" id="mode-ideas">Ideas</button>
+          </div>
+        </div>
+      </div>
+      <div class="messages" id="messages">
+        <div class="placeholder-msg" id="chat-placeholder">
+          <div class="placeholder-icon">?</div>
+          <div style="font-size:1rem; font-weight:700; color:#dbe7ff;">Select a friend</div>
+          <div>Pick someone from the list to open a chat. Topics you discuss will build your Knowledge Constellation.</div>
+        </div>
+      </div>
+      <div class="chat-input-area">
+        <div class="input-row">
+          <textarea id="msg-input" rows="1" placeholder="Type a message..." disabled></textarea>
+          <label class="btn btn-ghost" title="Attach file" id="attach-label">
+            Attach
+            <input type="file" id="file-input" style="display:none" accept=".pdf,.png,.jpg,.jpeg,.txt,.doc,.docx,.xls,.xlsx,.webp" />
+          </label>
+          <button class="btn btn-primary" id="send-btn" disabled title="Send">Send</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="graph-panel">
+      <div class="graph-header">
+        <div>
+          <div class="graph-title" id="graph-title">Knowledge Constellation</div>
+          <div class="graph-sub" id="graph-sub">Send a message to grow the graph</div>
+        </div>
+        <div class="graph-actions">
+          <button class="reset-btn" id="delete-node-btn" style="display:none; background:#ef4444; border-color:#ef4444;">Delete</button>
+          <button class="reset-btn" id="center-graph-btn">Reset view</button>
+        </div>
+      </div>
+      <div class="graph-canvas">
+        <div class="empty-graph" id="empty-graph">
+          <div class="empty-graph-icon">+</div>
+          <div style="font-size:1rem; font-weight:700;">Graph standby</div>
+          <p>Your knowledge graph will appear here as you chat.</p>
+        </div>
+        <svg id="constellation-svg"></svg>
+        <div class="graph-tooltip" id="graph-tooltip"></div>
+      </div>
+    </section>
+  </div>
+
+<script>
+const ME = {{ session.get('user_id', 0) }};
+const MY_NAME = {{ (session.get('user', '') or '') | tojson }};
+const OPEN_UID = {% if open_uid is defined %}{{ open_uid | tojson }}{% else %}null{% endif %};
+
+let activeChatId = null;
+let activeOtherUid = null;
+let knownFriends = [];
+// myKey will be set to the correct identity (numeric string locally, username string on MongoDB/Vercel)
+// It must be set before any message comparison. Use meReady to gate dependent calls.
+let myKey = String(ME || '');
+let meReadyResolve;
+const meReady = new Promise(res => { meReadyResolve = res; });
+let lastMsgId = { chat: 0, ideas: 0 };
+let pollTimer = null;
+let simulation = null;
+let lastGraphKey = '';
+let floatAnimId = null;
+let selectedNode = null;
+let activeMode = 'chat';
+
+const NODE_COLOR = { topic: '#1db9ff', file: '#0ea5e9', person: '#10b981', idea: '#f59e0b' };
+
+function setMode(mode) {
+  activeMode = mode;
+  document.getElementById('mode-chat').classList.toggle('active', mode === 'chat');
+  document.getElementById('mode-ideas').classList.toggle('active', mode === 'ideas');
+  document.getElementById('attach-label').style.display = mode === 'chat' ? 'inline-flex' : 'none';
+  document.getElementById('msg-input').placeholder = mode === 'ideas' ? 'Capture project ideas, tasks, or topics...' : 'Type a message...';
+  document.getElementById('graph-title').textContent = mode === 'ideas' ? 'Project Map' : 'Knowledge Constellation';
+  document.getElementById('graph-sub').textContent = mode === 'ideas' ? 'Ideas connect into a project graph' : 'Send a message to grow the graph';
+  document.getElementById('delete-node-btn').style.display = 'none';
+  lastMsgId[mode] = 0;
+  document.getElementById('messages').innerHTML = '';
+  if (activeChatId) {
+    loadMessages(true);
+    refreshGraph();
+  }
+}
+
+['mode-chat','mode-ideas'].forEach(id => {
+  document.getElementById(id).addEventListener('click', () => setMode(id === 'mode-chat' ? 'chat' : 'ideas'));
+});
+
+async function loadMe(){
+  try{
+    const r = await fetch('/api/constellation/me');
+    const me = await r.json();
+    if(me.handle) document.getElementById('my-handle').textContent = me.handle;
+    // Use the id returned by the API as myKey — this is a numeric string locally
+    // and a username string in MongoDB/Vercel mode. Both sides of the chat
+    // must use the same id type for sent-vs-received to work.
+    if(me.id) myKey = String(me.id);
+  } catch(e){
+    document.getElementById('my-handle').textContent = 'unavailable';
+  } finally {
+    // Always resolve meReady so dependent callers aren't blocked forever
+    meReadyResolve();
+  }
+}
+
+async function loadFriendRequests(){
+  const list = document.getElementById('request-list');
+  try{
+    const r = await fetch('/api/constellation/friends/requests');
+    const requests = await r.json();
+    if(!Array.isArray(requests) || requests.length === 0){
+      list.innerHTML = '';
+      return;
+    }
+    list.innerHTML = requests.map(req => {
+      const u = req.user || {};
+      const incoming = req.direction === 'incoming';
+      const actions = incoming
+        ? `<div class="request-actions"><button data-req="${req.id}" data-action="accept">Accept</button><button data-req="${req.id}" data-action="decline">Decline</button></div>`
+        : `<div class="page-subtitle">Request pending</div>`;
+      return `<div class="request-card">
+        <div><strong>${escHtml(u.display_name || u.username || 'User')}</strong></div>
+        <div class="page-subtitle">${escHtml(u.handle || '')}</div>
+        ${actions}
+      </div>`;
+    }).join('');
+    list.querySelectorAll('button[data-req]').forEach(btn => {
+      btn.addEventListener('click', () => respondFriendRequest(btn.dataset.req, btn.dataset.action));
+    });
+  } catch(e){}
+}
+
+async function respondFriendRequest(requestId, action){
+  try{
+    const r = await fetch('/api/constellation/friends/respond', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({request_id: requestId, action})
+    });
+    const d = await r.json();
+    setFriendStatus(d.error || (d.success ? `Request ${d.status}.` : 'Could not update request.'));
+    await loadFriendRequests();
+    await loadUsers();
+  } catch(e){
+    setFriendStatus('Could not update request.');
+  }
+}
+
+function setFriendStatus(message){
+  const el = document.getElementById('friend-status');
+  el.textContent = message || '';
+  if(message) setTimeout(() => { if(el.textContent === message) el.textContent = ''; }, 3500);
+}
+
+document.getElementById('friend-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const input = document.getElementById('friend-handle');
+  const handle = input.value.trim();
+  if(!handle) return;
+  try{
+    const r = await fetch('/api/constellation/friends/request', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({handle})
+    });
+    const d = await r.json();
+    setFriendStatus(d.error || d.message || (d.success ? 'Friend request sent.' : 'Could not send request.'));
+    if(d.success) input.value = '';
+    await loadFriendRequests();
+    await loadUsers();
+  } catch(err){
+    setFriendStatus('Could not send request.');
+  }
+});
+
+async function loadUsers(){
+  const list = document.getElementById('user-list');
+  try{
+    // Wait for myKey to be set correctly before we can detect which chat is ours
+    await meReady;
+    const r = await fetch('/api/constellation/users');
+    const users = await r.json();
+    knownFriends = Array.isArray(users) ? users : [];
+    if(!Array.isArray(users) || users.length === 0){
+      list.innerHTML = '<p class="page-subtitle">No accepted friends yet. Add someone with their username#0000.</p>';
+      return;
+    }
+    list.innerHTML = '';
+    users.forEach(u => {
+      const el = document.createElement('div');
+      el.className = 'user-item';
+      if(String(activeOtherUid) === String(u.id)) el.classList.add('active');
+      el.dataset.uid = u.id;
+      const initials = (u.display_name || u.username || '?').charAt(0).toUpperCase();
+      const photoHTML = u.photo_path
+        ? `<img src="/static/${u.photo_path}" alt="avatar"/>`
+        : initials;
+      el.innerHTML = `<div class="c-avatar">${photoHTML}</div><div class="user-info"><div class="name">${escHtml(u.display_name || u.username)}</div><div class="sub">${escHtml(u.handle || ('@' + u.username))}</div></div>`;
+      el.addEventListener('click', () => openChat(u));
+      list.appendChild(el);
+    });
+    if(OPEN_UID){
+      const target = users.find(u => String(u.id) === String(OPEN_UID));
+      if(target) openChat(target);
+    }
+  } catch(e){
+    list.innerHTML = '<p class="page-subtitle" style="color:#ef4444">Error loading users</p>';
+  }
+}
+
+async function openChat(user){
+  document.querySelectorAll('.user-item').forEach(el => {
+    el.classList.toggle('active', String(el.dataset.uid) === String(user.id));
+  });
+  activeOtherUid = user.id;
+  const initials = (user.display_name || user.username || '?').charAt(0).toUpperCase();
+  document.getElementById('chat-avatar').innerHTML = user.photo_path
+    ? `<img src="/static/${user.photo_path}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>`
+    : initials;
+  document.getElementById('chat-name').textContent = user.display_name || user.username;
+  document.getElementById('chat-sub').textContent = '@' + user.username;
+
+  const res = await fetch(`/api/constellation/chat/${encodeURIComponent(user.id)}`);
+  const data = await res.json();
+  if(!res.ok || !data.chat_id){
+    setFriendStatus(data.error || 'Could not open chat.');
+    return;
+  }
+  activeChatId = data.chat_id;
+  lastMsgId = { chat: 0, ideas: 0 };
+  lastGraphKey = '';
+
+  document.getElementById('msg-input').disabled = false;
+  document.getElementById('send-btn').disabled = false;
+  document.getElementById('chat-placeholder').style.display = 'none';
+  document.getElementById('messages').innerHTML = '';
+
+  await loadMessages(true);
+  await refreshGraph();
+
+  if(pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(async () => { await loadMessages(); await refreshGraph(); await loadFriendRequests(); }, 1500);
+}
+
+function modeEndpoints(){
+  const encChatId = encodeURIComponent(activeChatId);
+  if (activeMode === 'ideas') {
+    return {
+      messages: `/api/constellation/ideas/messages/${encChatId}`,
+      send: '/api/constellation/ideas/send',
+      graph: `/api/constellation/ideas/graph/${encChatId}`
+    };
+  }
+  return {
+    messages: `/api/constellation/messages/${encChatId}`,
+    send: '/api/constellation/send',
+    graph: `/api/constellation/graph/${encChatId}`
+  };
+}
+
+async function loadMessages(initial = false){
+  if(!activeChatId) return;
+  const endpoints = modeEndpoints();
+  try{
+    const since = lastMsgId[activeMode] || 0;
+    const r = await fetch(`${endpoints.messages}?since_id=${since}`);
+    const msgs = await r.json();
+    if(!Array.isArray(msgs) || msgs.length === 0) return;
+    const box = document.getElementById('messages');
+    msgs.forEach(m => {
+      // myKey is guaranteed to be set (either numeric string locally, username string in MongoDB/Vercel)
+      // sender_id in the API response matches the same format as myKey in both backends
+      const sent = String(m.sender_id) === myKey;
+      const bubble = document.createElement('div');
+      bubble.className = `msg-bubble ${sent ? 'sent' : 'recv'} ${activeMode === 'ideas' ? 'idea' : ''}`;
+      bubble.dataset.msgId = m.id;
+      if(m.file_url){
+        const icon = m.file_type === 'pdf' ? '📄 PDF' : m.file_type === 'image' ? '🖼 IMG' : '📎 FILE';
+        bubble.innerHTML = `<a class="msg-file" href="${m.file_url}" target="_blank" rel="noopener">
+          <span class="file-icon">${icon}</span>
+          <div class="file-info">
+            <div class="fn">${escHtml(m.file_name || 'File')}</div>
+            <div class="ft">${(m.file_type || '').toUpperCase()}</div>
+          </div>
+        </a><div class="msg-time">${fmtTime(m.created_at)}</div>`;
+      } else {
+        bubble.innerHTML = `${escHtml(m.content || '')}<div class="msg-time">${fmtTime(m.created_at)}</div>`;
+      }
+      box.appendChild(bubble);
+      // Track the latest message id (numeric for SQLite, string ObjectId for MongoDB)
+      if(typeof m.id === 'number'){
+        lastMsgId[activeMode] = Math.max(Number(lastMsgId[activeMode] || 0), m.id);
+      } else {
+        lastMsgId[activeMode] = m.id;
+      }
+    });
+    box.scrollTop = box.scrollHeight;
+  } catch(e){}
+}
+
+async function sendMessage(){
+  const inp = document.getElementById('msg-input');
+  const content = inp.value.trim();
+  if(!content || !activeChatId) return;
+  inp.value = '';
+  inp.style.height = 'auto';
+  const endpoints = modeEndpoints();
+  
+  // Display message optimistically
+  const box = document.getElementById('messages');
+  const bubble = document.createElement('div');
+  bubble.className = `msg-bubble sent ${activeMode === 'ideas' ? 'idea' : ''}`;
+  bubble.dataset.msgId = 'temp-' + Date.now();
+  bubble.innerHTML = `${escHtml(content)}<div class="msg-time">${fmtTime(new Date().toISOString())}</div>`;
+  bubble.style.opacity = '0.7';
+  box.appendChild(bubble);
+  box.scrollTop = box.scrollHeight;
+  
+  try{
+    const r = await fetch(endpoints.send, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({chat_id: activeChatId, content})
+    });
+    const result = await r.json();
+    if(result.error){
+      console.error('Send error:', result.error);
+      bubble.style.opacity = '0.4';
+      bubble.style.textDecoration = 'line-through';
+      return;
+    }
+    bubble.remove();
+    await loadMessages();
+    await refreshGraph();
+  } catch(e){
+    console.error('Send exception:', e);
+    bubble.style.opacity = '0.4';
+    bubble.style.textDecoration = 'line-through';
+  }
+}
+
+document.getElementById('send-btn').addEventListener('click', sendMessage);
+document.getElementById('msg-input').addEventListener('keydown', e => {
+  if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); }
+});
+document.getElementById('msg-input').addEventListener('input', function(){
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+});
+
+// File upload (chat mode only)
+document.getElementById('file-input').addEventListener('change', async function(){
+  const file = this.files[0];
+  if(!file || !activeChatId || activeMode !== 'chat') return;
+  const fd = new FormData();
+  fd.append('chat_id', activeChatId);
+  fd.append('file', file);
+  try{
+    const r = await fetch('/api/constellation/upload', {method: 'POST', body: fd});
+    const d = await r.json();
+    if(d.success){ await loadMessages(); await refreshGraph(); }
+    else alert(d.error || 'Upload failed');
+  } catch(e){ alert('Upload error'); }
+  this.value = '';
+});
+
+async function refreshGraph(){
+  if(!activeChatId) return;
+  const endpoints = modeEndpoints();
+  try{
+    const r = await fetch(endpoints.graph);
+    const data = await r.json();
+    const nodeIds = (data.nodes || []).map(n => `${n.id}:${n.mention_count || 1}:${n.label}`).sort().join(',');
+    const edgeIds = (data.edges || []).map(e => `${e.source_node_id}-${e.target_node_id}:${e.weight || 1}`).sort().join(',');
+    const key = `${activeMode}|${nodeIds}|${edgeIds}`;
+    if(key === lastGraphKey) return;
+    lastGraphKey = key;
+    renderGraph(data);
+  } catch(e){}
+}
+
+function renderGraph(data){
+  const nodes = (data.nodes || []).map(n => ({...n}));
+  const edges = (data.edges || []).map(e => ({
+    source: e.source_node_id,
+    target: e.target_node_id,
+    weight: e.weight || 1
+  }));
+
+  const emptyEl = document.getElementById('empty-graph');
+  emptyEl.style.display = nodes.length === 0 ? 'flex' : 'none';
+
+  const svgEl = document.getElementById('constellation-svg');
+  const W = svgEl.clientWidth || 600;
+  const H = svgEl.clientHeight || 500;
+
+  d3.select(svgEl).selectAll('*').remove();
+  const svg = d3.select(svgEl);
+
+  const starsG = svg.append('g');
+  d3.range(90).forEach(() => {
+    starsG.append('circle')
+      .attr('cx', Math.random() * W).attr('cy', Math.random() * H)
+      .attr('r', Math.random() * 1.4 + 0.2)
+      .attr('fill', `rgba(255,255,255,${0.05 + Math.random() * 0.3})`);
+  });
+
+  if(nodes.length === 0) return;
+
+  const defs = svg.append('defs');
+  ['topic','file','person','idea'].forEach(t => {
+    const f = defs.append('filter').attr('id', `glow-${t}`);
+    f.append('feGaussianBlur').attr('in','SourceGraphic').attr('stdDeviation','2.6').attr('result','blur');
+    const m = f.append('feMerge');
+    m.append('feMergeNode').attr('in','blur');
+    m.append('feMergeNode').attr('in','SourceGraphic');
+  });
+
+  const g = svg.append('g');
+  const zoom = d3.zoom().scaleExtent([.2, 5]).on('zoom', e => g.attr('transform', e.transform));
+  svg.call(zoom);
+
+  const maxMention = d3.max(nodes, n => n.mention_count) || 1;
+  const nodeR = n => (n.node_type === 'file' ? 11 : 15) + Math.sqrt(n.mention_count / maxMention) * 11;
+  const hexPoints = r => d3.range(6).map(i => {
+    const angle = i * Math.PI / 3;
+    return `${Math.cos(angle) * r},${Math.sin(angle) * r}`;
+  }).join(' ');
+
+  if(simulation) simulation.stop();
+  simulation = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(edges).id(n => n.id).distance(120).strength(.55))
+    .force('charge', d3.forceManyBody().strength(-260))
+    .force('center', d3.forceCenter(W / 2, H / 2))
+    .force('collision', d3.forceCollide().radius(n => nodeR(n) + 16))
+    .stop();
+
+  const iterations = Math.ceil(Math.log(simulation.alphaMin()) / Math.log(1 - simulation.alphaDecay()));
+  for(let i = 0; i < iterations; i++) simulation.tick();
+  nodes.forEach(n => { n.fx = n.x; n.fy = n.y; });
+
+  if(floatAnimId) { cancelAnimationFrame(floatAnimId); floatAnimId = null; }
+
+  const maxW = d3.max(edges, e => e.weight) || 1;
+  const link = g.append('g').selectAll('line').data(edges).join('line')
+    .attr('class', 'edge')
+    .attr('stroke-width', e => 1.4 + (e.weight / maxW) * 1.8)
+    .attr('x1', e => e.source.x).attr('y1', e => e.source.y)
+    .attr('x2', e => e.target.x).attr('y2', e => e.target.y);
+
+  const node = g.append('g').selectAll('g').data(nodes).join('g')
+    .style('cursor', 'grab')
+    .attr('transform', n => `translate(${n.x},${n.y})`)
+    .call(d3.drag()
+      .on('start', (e, d) => {
+        d.dragging = true;
+        d3.select(e.sourceEvent.target.closest('g')).style('cursor','grabbing');
+      })
+      .on('drag',  (e, d) => {
+        d.fx = e.x; d.fy = e.y; d.x = e.x; d.y = e.y;
+        d3.select(node.nodes()[nodes.indexOf(d)]).attr('transform', `translate(${e.x},${e.y})`);
+        link.attr('x1', ed => ed.source.x).attr('y1', ed => ed.source.y)
+            .attr('x2', ed => ed.target.x).attr('y2', ed => ed.target.y);
+      })
+      .on('end', (e, d) => {
+        d.dragging = false;
+        d3.select(e.sourceEvent.target.closest('g')).style('cursor','grab');
+      }));
+
+  node.append('polygon')
+    .attr('class', 'node-core')
+    .attr('points', n => hexPoints(nodeR(n)))
+    .attr('fill', n => NODE_COLOR[n.node_type] || '#1db9ff')
+    .attr('fill-opacity', .9)
+    .attr('filter', n => `url(#glow-${n.node_type || 'topic'})`)
+    .attr('stroke', 'rgba(226,242,255,.72)').attr('stroke-width', 1.2);
+
+  node.append('text')
+    .text(n => n.node_type === 'file' ? 'FILE ' + truncate(n.label, 16) : n.label)
+    .attr('text-anchor', 'middle')
+    .attr('dy', n => nodeR(n) + 18)
+    .attr('fill', '#f8fafc')
+    .attr('font-size', n => n.mention_count > 1 ? '14px' : '13px')
+    .attr('font-weight', n => n.mention_count > 2 ? '700' : '500')
+    .attr('font-family', 'Space Grotesk, sans-serif')
+    .style('pointer-events', 'none')
+    .style('text-shadow', '0 1px 4px rgba(0,0,0,.9)');
+
+  const tooltip = document.getElementById('graph-tooltip');
+  node.on('mouseover', (e, d) => {
+    tooltip.style.display = 'block';
+    tooltip.innerHTML = `<strong>${d.label}</strong><br/>Mentions: ${d.mention_count}`;
+  }).on('mousemove', e => {
+    const rect = svgEl.getBoundingClientRect();
+    tooltip.style.left = (e.clientX - rect.left + 14) + 'px';
+    tooltip.style.top  = (e.clientY - rect.top - 32) + 'px';
+  }).on('mouseout', () => { tooltip.style.display = 'none'; })
+  .on('click', (e, d) => {
+    highlightInChat(d);
+    if (activeMode === 'chat') {
+      selectedNode = d;
+      document.getElementById('delete-node-btn').style.display = 'inline-block';
+      node.selectAll('.node-core')
+          .attr('stroke', n => n.id === d.id ? '#ffffff' : 'rgba(226,242,255,.72)')
+          .attr('stroke-width', n => n.id === d.id ? 2.8 : 1.2);
+    } else {
+      selectedNode = null;
+      document.getElementById('delete-node-btn').style.display = 'none';
+    }
+  });
+
+  document.getElementById('delete-node-btn').onclick = async () => {
+    if(!selectedNode || activeMode !== 'chat') return;
+    if(confirm(`Delete "${selectedNode.label}" from the constellation?`)){
+      try {
+        const r = await fetch(`/api/constellation/node/${encodeURIComponent(activeChatId)}/${encodeURIComponent(selectedNode.id)}`, { method: 'DELETE' });
+        const res = await r.json();
+        if(res.success){
+          selectedNode = null;
+          document.getElementById('delete-node-btn').style.display = 'none';
+          await refreshGraph();
+        } else {
+          alert(res.error || 'Failed to delete node');
+        }
+      } catch(err) {
+        alert('Error deleting node');
+      }
+    }
+  };
+
+  document.getElementById('center-graph-btn').onclick = () => {
+    svg.transition().duration(600).call(zoom.transform, d3.zoomIdentity);
+  };
+  document.getElementById('graph-sub').textContent = `${nodes.length} node${nodes.length!==1?'s':''} - ${edges.length} connection${edges.length!==1?'s':''}`;
+
+  const FLOAT_AMP   = 6;
+  const FLOAT_SPEED = 0.0008;
+  const phases = nodes.map(() => Math.random() * Math.PI * 2);
+  const t0 = performance.now();
+
+  const starEls = starsG.selectAll('circle').nodes();
+  const starBase = starEls.map(s => parseFloat(s.getAttribute('fill').match(/([\d.]+)\)/)?.[1] || 0.15));
+
+  function floatTick(now) {
+    const t = (now - t0) * FLOAT_SPEED;
+    nodes.forEach((n, i) => {
+      if(n.dragging) return;
+      n.x = n.fx + Math.sin(t + phases[i]) * FLOAT_AMP;
+      n.y = n.fy + Math.cos(t * 0.71 + phases[i] + 1.2) * FLOAT_AMP;
+    });
+    node.attr('transform', n => `translate(${n.x},${n.y})`);
+    link.attr('x1', e => e.source.x).attr('y1', e => e.source.y)
+        .attr('x2', e => e.target.x).attr('y2', e => e.target.y);
+
+    starEls.forEach((s, i) => {
+      const twinkle = starBase[i] + Math.sin(t * 1.3 + i * 0.7) * 0.12;
+      s.setAttribute('fill', `rgba(255,255,255,${Math.max(0.02, Math.min(0.55, twinkle))})`);
+    });
+
+    floatAnimId = requestAnimationFrame(floatTick);
+  }
+  floatAnimId = requestAnimationFrame(floatTick);
+}
+
+function highlightInChat(d){
+  const msgs = document.getElementById('messages').querySelectorAll('.msg-bubble');
+  for(const m of msgs){
+    if(m.textContent.toLowerCase().includes(d.label.toLowerCase())){
+      m.scrollIntoView({behavior:'smooth', block:'center'});
+      const prev = m.style.outline;
+      m.style.outline = '2px solid #1db9ff';
+      setTimeout(() => m.style.outline = prev, 2000);
+      return;
+    }
+  }
+}
+
+function fmtTime(iso){
+  if(!iso) return '';
+  try{
+    // Avoid double-Z: MongoDB ISO strings already end with 'Z'
+    const normalized = iso.endsWith('Z') ? iso : iso + 'Z';
+    return new Date(normalized).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  } catch{ return ''; }
+}
+function truncate(s, n){ return s && s.length > n ? s.slice(0, n) + '...' : s; }
+function escHtml(s){
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// loadMe() must complete first so myKey is correct before loadUsers() opens any chat
+loadMe().then(() => {
+  loadFriendRequests();
+  loadUsers();
+  setInterval(async () => { await loadFriendRequests(); await loadUsers(); }, 5000);
+});
+window.addEventListener('resize', () => { if(activeChatId) refreshGraph(); });
+</script>
+</body>
+</html>

@@ -1,6 +1,6 @@
-# Arcade & Archives — JavaScript Conversion
+# Arcade — Final Project
 live link https://archive-arcade-mini-project.onrender.com
-An end-to-end Node.js + Express app that blends a curated Books catalog, a Video Games shop with cart and demo checkout, a Cafe booking system, an Admin dashboard with revenue insights, and a Community page for email-based joining and admin updates. Modern glass UI with background videos and a unified header across pages.
+An end-to-end Flask app that blends a curated Books catalog, a Video Games shop with cart and demo checkout, a Cafe booking system, an Admin dashboard with revenue insights, and a Community page for email-based joining and admin updates. Modern glass UI with background videos and a unified header across pages.
 
 ## ✨ Features
 
@@ -47,11 +47,10 @@ An end-to-end Node.js + Express app that blends a curated Books catalog, a Video
 
 ## 🧱 Tech Stack
 
-- Node.js, Express 4
-- express-session for auth sessions
-- Nunjucks templates (Jinja-compatible syntax)
-- JSON file persistence under `instance/json_store/`
-- HTML templates, CSS glass design, small vanilla JS
+- Python 3.12, Flask 3.x
+- Flask-SQLAlchemy for `users.db` (User model)
+- SQLite (raw) for `books.db`, `games.db` (purchase history), `cafe.db`, `community.db`
+- HTML + Jinja2 templates, CSS glass design, small vanilla JS
 
 ## 📦 Setup
 
@@ -62,16 +61,21 @@ git clone https://github.com/stashlop/Archive-Arcade-mini-project.git
 cd Archive-Arcade-mini-project
 ```
 
-2) Install dependencies
+2) Create a virtual environment and install deps
 
 ```bash
-npm install
+python3 -m venv .venv
+source .venv/bin/activate  # Linux/macOS
+# .venv\Scripts\activate  # Windows (PowerShell)
+
+pip install -r requirements.txt
 ```
 
-3) Run the app
+3) Run the app (note: folder name contains an ampersand)
 
 ```bash
-npm start
+python A\&A/app.py  # Linux/macOS
+# python "A&A/app.py"  # Windows
 ```
 
 The app will start on http://127.0.0.1:5000 by default.
@@ -88,7 +92,7 @@ The app will start on http://127.0.0.1:5000 by default.
 
 ## ⚙️ Environment variables (optional)
 
-- `SECRET_KEY`: session secret (default: `dev-secret-key-change-me`)
+- `SECRET_KEY`: Flask secret (default: `dev-secret-key-change-me`)
 - `ADMIN_DEFAULT_PASSWORD`: seed password for admin
 - `ADMIN_USERS`: comma-separated usernames to grant admin
 - Cafe settings:
@@ -102,18 +106,17 @@ The app will start on http://127.0.0.1:5000 by default.
 	- `USD_TO_INR` — conversion rate used by the Jinja `inr` filter (default `83`). Catalog base prices (stored in USD) convert at render time; cart line item unit prices and purchase totals are stored already converted to INR.
 
 - Persistence:
-	- `INSTANCE_PATH` — override instance folder path (e.g. `/var/data/arcade-instance`) for deployments needing persistent disks.
+	- `INSTANCE_PATH` — override Flask instance folder path (e.g. `/var/data/arcade-instance`) for deployments needing persistent disks.
 
 ## 🗄️ Data storage
 
-All JSON files live under `instance/json_store/` and are created automatically on first use:
+All databases live under `instance/` and are created automatically on first use:
 
-- `users.json`
-- `books.json`
-- `games.json`
-- `purchases.json`
-- `cafe_bookings.json`
-- `community.json`
+- `users.db` — Flask-SQLAlchemy User table (username, password_hash, display_name, photo_path)
+- `books.db` — books catalog (seeded on first run)
+- `games.db` — purchase_history (writes on checkout)
+- `cafe.db` — cafe_bookings
+- `community.db` — community_subscribers, community_messages
 
 Purchase history now includes a `delivery_status` column with lifecycle values:
 
@@ -160,10 +163,10 @@ User-uploaded avatars are saved under `static/uploads/community/`.
 
 ## ♻️ Resetting data
 
-To reset local persisted data (it will recreate on next run):
+To reset all local databases (they’ll recreate on next run):
 
 ```bash
-rm -rf instance/json_store
+rm -f instance/*.db
 ```
 
 Optionally clear uploaded avatars:

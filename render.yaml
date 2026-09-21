@@ -1,11 +1,11 @@
 services:
   - type: web
     name: arcade-archives
-    env: node
+    env: python
     region: oregon # pick your nearest region
     plan: free
-    buildCommand: npm install
-    startCommand: npm start
+    buildCommand: python -m pip install -r requirements.txt
+    startCommand: python "A&A/app.py"
     envVars:
       - key: SECRET_KEY
         value: dev-secret-key-change-me
@@ -23,6 +23,10 @@ services:
         value: "60"
       - key: CAFE_SLOT_CAPACITY
         value: "10"
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DB
+        value: arcade
       - key: INSTANCE_PATH
         # Set this to the mount path of your attached persistent disk on Render.
         # Example: /mnt/instance

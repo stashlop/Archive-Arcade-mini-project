@@ -2,44 +2,40 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Purchase History - A&A Store</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Purchase History - Arcade</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='arcade.css') }}" />
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin:0; color:#fff; background: radial-gradient(1200px 600px at 20% -10%, #6b7cff55, #000000 60%); }
-    .header { position: sticky; top:0; z-index:10; background: rgba(255,255,255,0.08); backdrop-filter: blur(10px); padding: 1rem 2rem; border-bottom: 1px solid rgba(255,255,255,0.15); }
-    .nav { max-width: 1100px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; }
-    .logo { font-weight: 800; letter-spacing:0.5px; }
-    .nav a { color:#fff; text-decoration:none; margin-left:1rem; padding: .4rem .7rem; border-radius:8px; }
-    .nav a:hover { background: rgba(255,255,255,0.15); }
-    .container { max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
-    h1 { margin: 0 0 1rem; }
-    .card { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 16px; padding: 1rem; }
-    .list { display:grid; gap:.8rem; }
-    .entry { background: rgba(0,0,0,0.2); border-radius: 12px; padding: .8rem; }
-    .top { display:flex; align-items:center; justify-content:space-between; }
-    .muted { opacity:.85; }
-    .items { margin-top:.5rem; display:grid; gap:.3rem; }
-  .pill { font-size:.8rem; padding:.2rem .5rem; border-radius:999px; background: rgba(255,255,255,0.15); margin-left:.5rem; }
-  .ds-processing { background: rgba(59,130,246,0.25); border:1px solid rgba(59,130,246,0.5); }
-  .ds-out { background: rgba(234,179,8,0.25); border:1px solid rgba(234,179,8,0.5); }
-  .ds-delivered { background: rgba(34,197,94,0.25); border:1px solid rgba(34,197,94,0.5); }
-  /* Payment method color tags */
-  .pm-card { background: rgba(37,99,235,0.25); border:1px solid rgba(37,99,235,0.45); }
-  .pm-upi { background: rgba(22,163,74,0.25); border:1px solid rgba(22,163,74,0.45); }
-  .pm-cod { background: rgba(245,158,11,0.25); border:1px solid rgba(245,158,11,0.45); }
-  .pm-demo { background: rgba(107,114,128,0.25); border:1px solid rgba(107,114,128,0.45); }
-    .empty { text-align:center; padding:2rem; opacity:.9; }
+    .entry { display: grid; gap: 0.6rem; }
+    .top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.6rem; }
+    .items { display: grid; gap: 0.4rem; }
+    .pill { font-size: 0.8rem; }
+    .ds-processing { background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.4); }
+    .ds-out { background: rgba(234, 179, 8, 0.2); border: 1px solid rgba(234, 179, 8, 0.4); }
+    .ds-delivered { background: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.4); }
+    .pm-card { background: rgba(37, 99, 235, 0.2); border: 1px solid rgba(37, 99, 235, 0.4); }
+    .pm-upi { background: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.4); }
+    .pm-cod { background: rgba(245, 158, 11, 0.2); border: 1px solid rgba(245, 158, 11, 0.4); }
+    .pm-demo { background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.4); }
   </style>
 </head>
 <body>
   {% include 'partials/header.html' %}
 
-  <main class="container">
-    <h1>Purchase History</h1>
-    <div class="card">
+  <main class="page-shell">
+    <header class="page-header">
+      <p class="badge">Order Log</p>
+      <h1 class="page-title">Purchase History</h1>
+      <p class="page-subtitle">Track delivery status and past orders.</p>
+    </header>
+
+    <section class="section-card">
       <div id="history" class="list"></div>
-      <div id="empty" class="empty" style="display:none">No purchases yet.</div>
-    </div>
+      <div id="empty" class="section-card" style="display:none; text-align:center;">No purchases yet.</div>
+    </section>
   </main>
 
   <script>
@@ -57,7 +53,7 @@
         empty.style.display = 'none';
         data.forEach(h => {
           const div = document.createElement('div');
-          div.className = 'entry';
+          div.className = 'item entry';
           const date = new Date(h.date).toLocaleString();
           const total = Number(h.total || 0).toFixed(2);
           const buyer = h.buyer?.name || '';
@@ -72,15 +68,15 @@
                 ${paymentBadge(pay)}
                 ${ds}
               </div>
-              <div><strong>₹${total}</strong></div>
+              <div><strong>INR ${total}</strong></div>
             </div>
-            <div class="muted">${buyer} ${email ? '• ' + email : ''}</div>
+            <div class="page-subtitle">${buyer} ${email ? '- ' + email : ''}</div>
             <div class="items">${(h.items||[]).map(it => `
-              <div>${it.title} <span class="pill">${(it.item_type||'').toString().toUpperCase()}</span> <span class="pill">${it.action === 'rent' ? 'Rent' : 'Buy'}</span> x${it.quantity} — ₹${(Number(it.unit_price)*Number(it.quantity)).toFixed(2)}</div>
+              <div>${it.title} <span class="pill">${(it.item_type||'').toString().toUpperCase()}</span> <span class="pill">${it.action === 'rent' ? 'Rent' : 'Buy'}</span> x${it.quantity} - INR ${(Number(it.unit_price)*Number(it.quantity)).toFixed(2)}</div>
             `).join('')}</div>
           `;
           list.appendChild(div);
-        })
+        });
       } catch (e) {
         alert('Failed to load history');
       }
@@ -88,18 +84,19 @@
     function paymentBadge(method){
       const m = (method || 'Demo').toString().trim();
       const key = m.toLowerCase();
-      let icon = '🧪', cls = 'pm-demo', label = m || 'Demo';
-      if (key === 'card') { icon = '💳'; cls = 'pm-card'; label = 'Card'; }
-      else if (key === 'upi') { icon = '📱'; cls = 'pm-upi'; label = 'UPI'; }
-      else if (key === 'cod' || key === 'cash on delivery') { icon = '💵'; cls = 'pm-cod'; label = 'COD'; }
-      return `<span class="pill ${cls}">${icon} ${label}</span>`;
+      let label = m || 'Demo';
+      let cls = 'pm-demo';
+      if (key === 'card') { cls = 'pm-card'; label = 'Card'; }
+      else if (key === 'upi') { cls = 'pm-upi'; label = 'UPI'; }
+      else if (key === 'cod' || key === 'cash on delivery') { cls = 'pm-cod'; label = 'COD'; }
+      return `<span class="pill ${cls}">${label}</span>`;
     }
     function deliveryBadge(status){
       const s = (status||'Processing').trim().toLowerCase();
       let label = 'Processing', cls = 'ds-processing';
       if (s === 'out for delivery') { label = 'Out for delivery'; cls = 'ds-out'; }
       else if (s === 'delivered' || s === 'successful' || s === 'success') { label = 'Delivered'; cls = 'ds-delivered'; }
-      return `<span class="pill ${cls}">📦 ${label}</span>`;
+      return `<span class="pill ${cls}">${label}</span>`;
     }
     loadHistory();
   </script>

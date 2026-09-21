@@ -2,75 +2,69 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Your Cart - A&A Store</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Your Cart - Arcade</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='arcade.css') }}" />
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin:0; color:#fff; background: radial-gradient(1200px 600px at 20% -10%, #6b7cff55, #000000 60%); }
-    .header { position: sticky; top:0; z-index:10; background: rgba(255,255,255,0.08); backdrop-filter: blur(10px); padding: 1rem 2rem; border-bottom: 1px solid rgba(255,255,255,0.15); }
-    .nav { max-width: 1100px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; }
-    .logo { font-weight: 800; letter-spacing:0.5px; }
-    .nav a { color:#fff; text-decoration:none; margin-left:1rem; padding: .4rem .7rem; border-radius:8px; }
-    .nav a:hover { background: rgba(255,255,255,0.15); }
-    .container { max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
-    h1 { margin: 0 0 1rem; }
-    .card { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 16px; padding: 1rem; }
-    .items { display:grid; gap:1rem; }
-    .item { display:grid; grid-template-columns: 1fr auto auto auto; gap: 1rem; align-items:center; padding: .8rem; border-radius: 12px; background: rgba(0,0,0,0.2); }
-    .title { font-weight:600; }
-    .pill { font-size:.8rem; padding:.2rem .5rem; border-radius:999px; background: rgba(255,255,255,0.15); }
-    .price { font-variant-numeric: tabular-nums; }
-    .summary { display:flex; align-items:center; justify-content: space-between; margin-top:1rem; padding-top:1rem; border-top:1px dashed rgba(255,255,255,0.2); }
-    .actions { display:flex; gap:.5rem; }
-    button { cursor:pointer; border:none; border-radius:10px; padding:.6rem .9rem; color:#fff; }
-    .btn-danger { background:#ef4444; }
-    .btn-secondary { background:#475569; }
-    .btn-primary { background:#3b82f6; }
-    .empty { text-align:center; padding:2rem; opacity:.9; }
-    @media (max-width: 700px) {
-      .item { grid-template-columns: 1fr auto; }
-      .qty, .price { justify-self: end; }
+    .cart-grid { display: grid; gap: 1.5rem; }
+    .item { display: grid; grid-template-columns: 1fr auto auto; gap: 1rem; align-items: center; }
+    .item-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+    @media (max-width: 720px) {
+      .item { grid-template-columns: 1fr; gap: 0.6rem; }
+      .item-actions { justify-content: flex-start; }
     }
   </style>
 </head>
 <body>
   {% include 'partials/header.html' %}
 
-  <main class="container">
-    <h1>Your Cart</h1>
-    <div class="card">
-      {% if items %}
-      <div class="items" id="cartItems">
-        {% for it in items %}
-          <div class="item" data-key="{{ it.key }}">
-            <div class="title">
-              {{ it.title }} <span class="pill">{{ it.item_type|capitalize }} • {{ 'Buy' if it.action=='buy' else 'Rent' }}</span>
-            </div>
-            <div class="qty">x{{ it.quantity }}</div>
-            <div class="price">₹{{ '%.2f'|format(it.unit_price * it.quantity) }}</div>
-            <div class="actions">
-              <button class="btn-danger" onclick="removeItem('{{ it.key }}')">Remove</button>
-            </div>
-          </div>
-        {% endfor %}
-      </div>
+  <main class="page-shell">
+    <header class="page-header">
+      <p class="badge">Your Order</p>
+      <h1 class="page-title">Cart</h1>
+      <p class="page-subtitle">Review, edit, or head to checkout.</p>
+    </header>
 
-      <div class="summary">
-  <div><strong>Subtotal:</strong> ₹<span id="subtotal">{{ '%.2f'|format(subtotal) }}</span></div>
-        <div>
-          <button class="btn-secondary" data-history-url="{{ url_for('history_page') }}" onclick="goHistory(this)">History</button>
-          <button class="btn-secondary" onclick="clearCart()">Clear Cart</button>
-          <button class="btn-primary" onclick="checkout()">Checkout</button>
+    <section class="section-card cart-grid">
+      {% if items %}
+        <div class="items" id="cartItems">
+          {% for it in items %}
+            <div class="item" data-key="{{ it.key }}">
+              <div>
+                <div style="font-weight: 600;">{{ it.title }}</div>
+                <div class="page-subtitle">{{ it.item_type|capitalize }} - {{ 'Buy' if it.action=='buy' else 'Rent' }} - x{{ it.quantity }}</div>
+              </div>
+              <div style="font-weight: 700;">INR {{ '%.2f'|format(it.unit_price * it.quantity) }}</div>
+              <div class="item-actions">
+                <button class="btn btn-danger" onclick="removeItem('{{ it.key }}')">Remove</button>
+              </div>
+            </div>
+          {% endfor %}
         </div>
-      </div>
+
+        <div class="summary">
+          <div><strong>Subtotal:</strong> INR <span id="subtotal">{{ '%.2f'|format(subtotal) }}</span></div>
+          <div style="display: flex; gap: .6rem; flex-wrap: wrap;">
+            <button class="btn btn-ghost" data-history-url="{{ url_for('history_page') }}" onclick="goHistory(this)">History</button>
+            <button class="btn btn-ghost" onclick="clearCart()">Clear Cart</button>
+            <button class="btn btn-primary" onclick="checkout()">Checkout</button>
+          </div>
+        </div>
       {% else %}
-      <div class="empty">Your cart is empty.</div>
+        <div class="section-card" style="text-align: center;">
+          <h3>Your cart is empty.</h3>
+          <p>Start from books or games to add items.</p>
+        </div>
       {% endif %}
-    </div>
+    </section>
   </main>
 
   <script>
     function goHistory(el){
-      var url = el && el.getAttribute('data-history-url');
+      const url = el && el.getAttribute('data-history-url');
       if (url) window.location.href = url;
     }
     function refreshBadge(count) {
@@ -99,7 +93,6 @@
         });
     }
     function checkout() {
-      // Navigate to the full checkout page so users can choose payment method (Card/UPI/COD/Demo)
       window.location.href = '/checkout';
     }
   </script>
