@@ -36,6 +36,7 @@
       {% endwith %}
 
       <form method="post" action="{{ url_for('login') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <input type="hidden" name="next" value="{{ request.args.get('next','') }}">
         <label for="ident">Username or Email</label>
         <input id="ident" name="ident" required autocomplete="username">

@@ -21,6 +21,7 @@
 <body>
   <div class="auth-wrap">
     <form class="auth-card" method="post" action="{{ url_for('signup') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
       <p class="badge">New Explorer</p>
       <h2>Create account</h2>
 

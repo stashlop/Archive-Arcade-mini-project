@@ -64,6 +64,8 @@ except ImportError:
 
 def create_app(config=None):
     app = Flask(__name__, instance_relative_config=True)
+    if config:
+        app.config.update(config)
     # Allow overriding the instance path (useful when mounting a persistent
     # volume on PaaS providers like Render). Set the env var INSTANCE_PATH to
     # a writable persistent mount (e.g. /mnt/instance) so SQLite files survive
@@ -115,6 +117,28 @@ def create_app(config=None):
     db.init_app(app)
     from flask_migrate import Migrate
     migrate = Migrate(app, db)
+
+    from flask_wtf.csrf import CSRFProtect, generate_csrf
+    csrf = CSRFProtect()
+    if os.environ.get('TESTING') == '1' or app.config.get('TESTING'):
+        app.config['WTF_CSRF_ENABLED'] = False
+    csrf.init_app(app)
+
+    @app.after_request
+    def inject_csrf_cookie(response):
+        if app.config.get('WTF_CSRF_ENABLED', True):
+            try:
+                response.set_cookie('csrf_token', generate_csrf(), samesite='Lax')
+            except Exception:
+                pass
+        return response
+
+    @app.errorhandler(413)
+    def file_too_large(e):
+        if request.is_json or request.path.startswith('/api/'):
+            return jsonify({'error': 'File too large. Maximum allowed size is 16 MB.'}), 413
+        flash('Uploaded file is too large (max 16 MB).', 'error')
+        return redirect(request.url), 413
 
     # Initialize CORS for cross-device WiFi support
     if CORS is not None:
@@ -491,13 +515,13 @@ def create_app(config=None):
                 db.session.rollback()
             # Ensure a default admin user exists for demo access
             try:
-                from sqlalchemy.exc import SQLAlchemyError
                 if not User.query.filter_by(username='admin').first():
                     admin_pw = os.getenv('ADMIN_DEFAULT_PASSWORD', 'admin123')
-                    admin_user = User(username='admin', password_hash=generate_password_hash(admin_pw), user_tag=_generate_user_tag())
+                    admin_user = User(username='admin', email='admin@arcade.local', password_hash=generate_password_hash(admin_pw), user_tag=_generate_user_tag())
                     db.session.add(admin_user)
                     db.session.commit()
             except Exception:
+                db.session.rollback()
                 # Do not block app startup if seeding fails
                 pass
             app.db_initialized = True
@@ -615,6 +639,7 @@ def create_app(config=None):
             if user and check_password_hash(user.password_hash, password):
                 _ensure_user_tag(user)
                 session['user'] = user.username
+                session['username'] = user.username
                 session['user_id'] = user.id  # Add user_id to match auth.py
                 session['user_tag'] = user.user_tag
                 if _mongo_available():
@@ -657,8 +682,10 @@ def create_app(config=None):
                 db.session.commit()
                 # Reset and set session identity to the new user
                 session.pop('user', None)
+                session.pop('username', None)
                 session.pop('user_id', None)
                 session['user'] = username
+                session['username'] = username
                 session['user_id'] = new_user.id
                 session['user_tag'] = new_user.user_tag
                 if _mongo_available():
@@ -2882,6 +2909,23 @@ def create_app(config=None):
         allowed = {'pdf', 'png', 'jpg', 'jpeg', 'txt', 'doc', 'docx', 'xls', 'xlsx', 'webp'}
         if ext not in allowed:
             return jsonify({'error': f'File type .{ext} not allowed'}), 400
+        
+        # Validate magic bytes / file signature
+        header = file.read(512)
+        file.seek(0)
+        is_valid = True
+        if ext == 'png' and not header.startswith(b'\x89PNG\r\n\x1a\n'):
+            is_valid = False
+        elif ext in ('jpg', 'jpeg') and not header.startswith(b'\xff\xd8\xff'):
+            is_valid = False
+        elif ext == 'webp' and not (header.startswith(b'RIFF') and b'WEBP' in header[:16]):
+            is_valid = False
+        elif ext == 'pdf' and not header.startswith(b'%PDF-'):
+            is_valid = False
+        
+        if not is_valid:
+            return jsonify({'error': 'Uploaded file content does not match its declared type'}), 400
+
         file_type = 'pdf' if ext == 'pdf' else ('image' if ext in ('png', 'jpg', 'jpeg', 'webp') else 'note')
 
         if _mongo_available():

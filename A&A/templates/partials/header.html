@@ -32,3 +32,32 @@
     </ul>
   </nav>
 </header>
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<script>
+  (function() {
+    const origFetch = window.fetch;
+    window.fetch = function(url, options) {
+      options = options || {};
+      const method = (options.method || 'GET').toUpperCase();
+      if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        const token = meta ? meta.getAttribute('content') : '';
+        if (token) {
+          options.headers = options.headers || {};
+          if (options.headers instanceof Headers) {
+            if (!options.headers.has('X-CSRFToken')) {
+              options.headers.set('X-CSRFToken', token);
+            }
+          } else if (Array.isArray(options.headers)) {
+            options.headers.push(['X-CSRFToken', token]);
+          } else {
+            if (!options.headers['X-CSRFToken'] && !options.headers['x-csrf-token']) {
+              options.headers['X-CSRFToken'] = token;
+            }
+          }
+        }
+      }
+      return origFetch.call(this, url, options);
+    };
+  })();
+</script>
