@@ -25,10 +25,21 @@ def _to_inr(amount: float) -> float:
 def _item_key(item_type, item_id, action):
     return f"{item_type}-{item_id}-{action}"
 
+def _unified_db_path():
+    inst = current_app.instance_path if hasattr(current_app, 'instance_path') else 'instance'
+    os.makedirs(inst, exist_ok=True)
+    return os.path.join(inst, 'arcade.db')
+
+def _games_db_path():
+    return _unified_db_path()
+
+def _is_logged_in():
+    return bool(session.get('user') or session.get('username') or session.get('user_id'))
+
 def _fetch_item_details(item_type, item_id, action):
-    # Returns title and unit_price for given item
+    # Returns title and unit_price for given item from unified database
+    dbp = _unified_db_path()
     if item_type == 'book':
-        dbp = os.path.join(current_app.instance_path, 'books.db')
         conn = sqlite3.connect(dbp)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
@@ -40,7 +51,6 @@ def _fetch_item_details(item_type, item_id, action):
         unit_price = row['buy_price'] if action == 'buy' else row['rent_price']
         return {'title': row['title'], 'unit_price': _to_inr(unit_price)}
     elif item_type == 'game':
-        dbp = os.path.join(current_app.instance_path, 'games.db')
         conn = sqlite3.connect(dbp)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
@@ -49,7 +59,6 @@ def _fetch_item_details(item_type, item_id, action):
         conn.close()
         if not row:
             return None
-        # If your games table uses different column names, adjust above fields accordingly
         unit_price = row['buy_price'] if action == 'buy' else row['rent_price']
         return {'title': row['title'], 'unit_price': _to_inr(unit_price)}
     return None
@@ -58,11 +67,6 @@ def _totals(items):
     subtotal = sum(i['unit_price'] * i['quantity'] for i in items)
     total_qty = sum(i['quantity'] for i in items)
     return float(round(subtotal, 2)), int(total_qty)
-
-def _games_db_path():
-    inst = current_app.instance_path if hasattr(current_app, 'instance_path') else 'instance'
-    os.makedirs(inst, exist_ok=True)
-    return os.path.join(inst, 'games.db')
 
 def _ensure_purchase_history_table(conn):
     cur = conn.cursor()
@@ -111,7 +115,7 @@ def cart_count():
 
 @cart_bp.route('/add', methods=['POST'])
 def add_to_cart():
-    if 'user' not in session:
+    if not _is_logged_in():
         return jsonify({'error': 'Not logged in'}), 401
 
     data = request.get_json(force=True)
@@ -153,7 +157,7 @@ def add_to_cart():
 
 @cart_bp.route('/remove', methods=['POST'])
 def remove_from_cart():
-    if 'user' not in session:
+    if not _is_logged_in():
         return jsonify({'error': 'Not logged in'}), 401
 
     data = request.get_json(force=True)
@@ -170,7 +174,7 @@ def remove_from_cart():
 
 @cart_bp.route('/clear', methods=['POST'])
 def clear_cart():
-    if 'user' not in session:
+    if not _is_logged_in():
         return jsonify({'error': 'Not logged in'}), 401
 
     session['cart'] = {'items': []}
@@ -179,7 +183,7 @@ def clear_cart():
 
 @cart_bp.route('/checkout', methods=['POST'])
 def checkout():
-    if 'user' not in session:
+    if not _is_logged_in():
         return jsonify({'error': 'Not logged in'}), 401
 
     cart = _ensure_cart()
@@ -199,7 +203,7 @@ def checkout():
     items = cart['items']
     subtotal, _ = _totals(items)
 
-    # Persist purchase history into games.db (shared demo history store)
+    # Persist purchase history into unified arcade.db
     try:
         dbp = _games_db_path()
         conn = sqlite3.connect(dbp)

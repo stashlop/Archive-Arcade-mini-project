@@ -4,10 +4,17 @@ from flask import Blueprint, request, jsonify, current_app, session
 
 books_bp = Blueprint('books_api', __name__, url_prefix='/api')
 
+def get_db_path():
+    inst = current_app.instance_path if hasattr(current_app, 'instance_path') else 'instance'
+    return os.path.join(inst, 'arcade.db')
+
+def _is_logged_in():
+    return bool(session.get('user') or session.get('username') or session.get('user_id'))
+
 def init_books_db():
     """Initialize books database with sample data"""
     try:
-        dbp = os.path.join(current_app.instance_path, 'books.db')
+        dbp = get_db_path()
         conn = sqlite3.connect(dbp)
         cur = conn.cursor()
         
@@ -77,7 +84,7 @@ def init_books_db():
 def get_books():
     """Get all books with optional filtering"""
     try:
-        dbp = os.path.join(current_app.instance_path, 'books.db')
+        dbp = get_db_path()
         conn = sqlite3.connect(dbp)
         conn.row_factory = sqlite3.Row
         
@@ -116,7 +123,7 @@ def get_books():
 def get_book(book_id):
     """Get a specific book by ID"""
     try:
-        dbp = os.path.join(current_app.instance_path, 'books.db')
+        dbp = get_db_path()
         conn = sqlite3.connect(dbp)
         conn.row_factory = sqlite3.Row
         
@@ -135,18 +142,17 @@ def get_book(book_id):
 @books_bp.route('/purchase/book', methods=['POST'])
 def purchase_book():
     """Handle book purchase"""
-    if 'user' not in session:
+    if not _is_logged_in():
         return jsonify({'error': 'Not logged in'}), 401
         
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     book_id = data.get('bookId')
     
     if not book_id:
         return jsonify({'error': 'Book ID required'}), 400
     
     try:
-        # Get book details
-        dbp = os.path.join(current_app.instance_path, 'books.db')
+        dbp = get_db_path()
         conn = sqlite3.connect(dbp)
         conn.row_factory = sqlite3.Row
         
@@ -158,12 +164,6 @@ def purchase_book():
             conn.close()
             return jsonify({'error': 'Book not found'}), 404
             
-        # Here you would typically:
-        # 1. Process payment
-        # 2. Add to user's library
-        # 3. Send confirmation email
-        # For now, we'll just simulate success
-        
         conn.close()
         return jsonify({
             'success': True,
@@ -176,17 +176,17 @@ def purchase_book():
 @books_bp.route('/rent/book', methods=['POST'])
 def rent_book():
     """Handle book rental"""
-    if 'user' not in session:
+    if not _is_logged_in():
         return jsonify({'error': 'Not logged in'}), 401
         
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     book_id = data.get('bookId')
     
     if not book_id:
         return jsonify({'error': 'Book ID required'}), 400
     
     try:
-        dbp = os.path.join(current_app.instance_path, 'books.db')
+        dbp = get_db_path()
         conn = sqlite3.connect(dbp)
         conn.row_factory = sqlite3.Row
         

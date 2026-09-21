@@ -85,7 +85,17 @@ def create_app(config=None):
         except OSError:
             pass
 
-    app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key-change-me")
+    secret = os.getenv("SECRET_KEY")
+    if not secret:
+        if app.debug or os.environ.get('FLASK_ENV') == 'development' or os.environ.get('TESTING') == '1':
+            app.secret_key = "dev-secret-key-change-me"
+        else:
+            import secrets
+            app.secret_key = secrets.token_hex(32)
+    else:
+        app.secret_key = secret
+
+    app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
     
     database_url = (os.getenv('DATABASE_URL') or '').strip()
     if database_url.startswith('postgres://'):
@@ -96,14 +106,15 @@ def create_app(config=None):
     if database_url:
         app.config['SQLALCHEMY_DATABASE_URI'] = database_url
     else:
-        # Safely construct absolute URI for SQLAlchemy
-        db_path = os.path.join(app.instance_path, 'users.db').replace('\\', '/')
-        # If absolute path starts with / (like /tmp), we need an extra slash
+        # Safely construct absolute URI for SQLAlchemy pointing to unified arcade.db
+        db_path = os.path.join(app.instance_path, 'arcade.db').replace('\\', '/')
         uri_prefix = 'sqlite:////' if db_path.startswith('/') else 'sqlite:///'
         app.config['SQLALCHEMY_DATABASE_URI'] = uri_prefix + db_path.lstrip('/')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
     db.init_app(app)
+    from flask_migrate import Migrate
+    migrate = Migrate(app, db)
 
     # Initialize CORS for cross-device WiFi support
     if CORS is not None:
@@ -333,11 +344,129 @@ def create_app(config=None):
                 out_edges.append({'source_node_id': src, 'target_node_id': tgt, 'weight': e.get('weight', 1)})
         return {'nodes': out_nodes, 'edges': out_edges}
 
+    def _migrate_legacy_data(app_inst):
+        inst = app_inst.instance_path
+        unified = os.path.join(inst, 'arcade.db')
+        if not os.path.exists(unified):
+            return
+        try:
+            conn = sqlite3.connect(unified)
+            cur = conn.cursor()
+            # 1. Books
+            b_db = os.path.join(inst, 'books.db')
+            if os.path.exists(b_db) and os.path.abspath(b_db) != os.path.abspath(unified):
+                try:
+                    cur.execute("ATTACH DATABASE ? AS legacy_books", (b_db,))
+                    cur.execute("INSERT OR IGNORE INTO books SELECT * FROM legacy_books.books")
+                    cur.execute("DETACH DATABASE legacy_books")
+                except Exception:
+                    try: cur.execute("DETACH DATABASE legacy_books")
+                    except Exception: pass
+
+            # 2. Games & Purchase History
+            g_db = os.path.join(inst, 'games.db')
+            if os.path.exists(g_db) and os.path.abspath(g_db) != os.path.abspath(unified):
+                try:
+                    cur.execute("ATTACH DATABASE ? AS legacy_games", (g_db,))
+                    cur.execute("INSERT OR IGNORE INTO games SELECT * FROM legacy_games.games")
+                    try:
+                        cur.execute("INSERT OR IGNORE INTO purchase_history SELECT * FROM legacy_games.purchase_history")
+                    except Exception:
+                        pass
+                    cur.execute("DETACH DATABASE legacy_games")
+                except Exception:
+                    try: cur.execute("DETACH DATABASE legacy_games")
+                    except Exception: pass
+
+            # 3. Cafe
+            c_db = os.path.join(inst, 'cafe.db')
+            if os.path.exists(c_db) and os.path.abspath(c_db) != os.path.abspath(unified):
+                try:
+                    cur.execute("ATTACH DATABASE ? AS legacy_cafe", (c_db,))
+                    cur.execute("INSERT OR IGNORE INTO cafe_bookings SELECT * FROM legacy_cafe.cafe_bookings")
+                    cur.execute("DETACH DATABASE legacy_cafe")
+                except Exception:
+                    try: cur.execute("DETACH DATABASE legacy_cafe")
+                    except Exception: pass
+
+            # 4. Community
+            m_db = os.path.join(inst, 'community.db')
+            if os.path.exists(m_db) and os.path.abspath(m_db) != os.path.abspath(unified):
+                try:
+                    cur.execute("ATTACH DATABASE ? AS legacy_comm", (m_db,))
+                    cur.execute("INSERT OR IGNORE INTO community_subscribers SELECT * FROM legacy_comm.community_subscribers")
+                    try:
+                        cur.execute("INSERT OR IGNORE INTO community_messages SELECT * FROM legacy_comm.community_messages")
+                    except Exception:
+                        pass
+                    cur.execute("DETACH DATABASE legacy_comm")
+                except Exception:
+                    try: cur.execute("DETACH DATABASE legacy_comm")
+                    except Exception: pass
+
+            # 5. Users
+            u_db = os.path.join(inst, 'users.db')
+            if os.path.exists(u_db) and os.path.abspath(u_db) != os.path.abspath(unified):
+                try:
+                    cur.execute("ATTACH DATABASE ? AS legacy_users", (u_db,))
+                    try:
+                        cur.execute("INSERT OR IGNORE INTO users SELECT * FROM legacy_users.users")
+                    except Exception:
+                        try:
+                            cur.execute("INSERT OR IGNORE INTO users SELECT * FROM legacy_users.user")
+                        except Exception:
+                            pass
+                    cur.execute("DETACH DATABASE legacy_users")
+                except Exception:
+                    try: cur.execute("DETACH DATABASE legacy_users")
+                    except Exception: pass
+
+            # 6. Constellation
+            k_db = os.path.join(inst, 'constellation.db')
+            if os.path.exists(k_db) and os.path.abspath(k_db) != os.path.abspath(unified):
+                try:
+                    cur.execute("ATTACH DATABASE ? AS legacy_const", (k_db,))
+                    try:
+                        cur.execute("INSERT OR IGNORE INTO friend_requests SELECT * FROM legacy_const.friend_requests")
+                    except Exception: pass
+                    try:
+                        cur.execute("INSERT OR IGNORE INTO constellation_chats (id, user1_id, user2_id, created_at) SELECT id, user1_id, user2_id, created_at FROM legacy_const.chats")
+                    except Exception: pass
+                    try:
+                        cur.execute("INSERT OR IGNORE INTO constellation_messages (id, chat_id, sender_id, content, file_path, file_name, file_type, created_at) SELECT id, chat_id, sender_id, content, file_path, file_name, file_type, created_at FROM legacy_const.messages")
+                    except Exception: pass
+                    cur.execute("DETACH DATABASE legacy_const")
+                except Exception:
+                    try: cur.execute("DETACH DATABASE legacy_const")
+                    except Exception: pass
+
+            # Compatibility Views
+            try:
+                cur.execute("CREATE VIEW IF NOT EXISTS user AS SELECT * FROM users")
+                cur.execute("CREATE VIEW IF NOT EXISTS chats AS SELECT * FROM constellation_chats")
+                cur.execute("CREATE VIEW IF NOT EXISTS messages AS SELECT * FROM constellation_messages")
+            except Exception:
+                pass
+
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
+
     @app.before_request
     def create_tables():
         if not hasattr(app, 'db_initialized'):
             db.create_all()
+            _migrate_legacy_data(app)
             init_books_db()  # Initialize books database
+            try:
+                from games_api import init_db as init_games_db
+                gconn = sqlite3.connect(_unified_db_path())
+                init_games_db(gconn)
+                gconn.close()
+            except Exception:
+                pass
+
             # Self-heal User table to ensure profile columns exist
             try:
                 with db.engine.begin() as conn:
@@ -378,10 +507,13 @@ def create_app(config=None):
         items = session.get('cart', {}).get('items', [])
         return {'cart_count': sum(i.get('quantity', 1) for i in items)}
 
+    def _unified_db_path():
+        os.makedirs(app.instance_path, exist_ok=True)
+        return os.path.join(app.instance_path, 'arcade.db')
+
     # ---------- Community (simple subscriber + updates) ----------
     def _community_db_path():
-        os.makedirs(app.instance_path, exist_ok=True)
-        return os.path.join(app.instance_path, 'community.db')
+        return _unified_db_path()
 
     def _ensure_community_tables(conn):
         cur = conn.cursor()
@@ -838,8 +970,7 @@ def create_app(config=None):
 
     # ---- Cafe Booking (individual) ----
     def _cafe_db_path():
-        os.makedirs(app.instance_path, exist_ok=True)
-        return os.path.join(app.instance_path, 'cafe.db')
+        return _unified_db_path()
 
     def _ensure_cafe_tables(conn):
         cur = conn.cursor()
@@ -970,7 +1101,7 @@ def create_app(config=None):
 
     @app.route('/api/cafe/book', methods=['POST'])
     def cafe_book():
-        if 'user' not in session and 'user_id' not in session:
+        if not (session.get('user') or session.get('username') or session.get('user_id')):
             return jsonify({'error': 'Authentication required'}), 401
 
         data = request.get_json(silent=True) or {}
@@ -993,45 +1124,57 @@ def create_app(config=None):
         if _is_members_only(date):
             return jsonify({'error': 'Members-only esports event day'}), 403
 
-        # Capacity check + Save booking atomically
+        # Capacity check + Save booking atomically with mutex & immediate transaction
+        import threading
+        if not hasattr(app, '_cafe_booking_lock'):
+            app._cafe_booking_lock = threading.Lock()
+        
         from datetime import datetime as _dt
-        try:
+        with app._cafe_booking_lock:
             dbp = _cafe_db_path()
-            conn = sqlite3.connect(dbp)
+            conn = sqlite3.connect(dbp, timeout=30.0, isolation_level=None)
             conn.row_factory = sqlite3.Row
             _ensure_cafe_tables(conn)
             cur = conn.cursor()
-            # Check overlap usage
-            start_min = _parse_time_to_min(time)
-            used = _sum_booked_seats(conn, date, start_min, duration_min)
-            cap = _slot_capacity()
-            if used + party_size > cap:
-                remaining = max(0, cap - used)
-                conn.close()
-                return jsonify({'error': f'Not enough capacity in this slot', 'remaining': remaining, 'capacity': cap}), 409
-            # Save
-            cur.execute(
-                """
-                INSERT INTO cafe_bookings (user_id, date, time, party_size, note, status, created_at, duration_minutes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    int(session.get('user_id') or 0),
-                    date,
-                    time,
-                    party_size,
-                    note,
-                    'confirmed',
-                    _dt.utcnow().isoformat(),
-                    duration_min
+            try:
+                cur.execute("BEGIN IMMEDIATE")
+                # Check overlap usage
+                start_min = _parse_time_to_min(time)
+                used = _sum_booked_seats(conn, date, start_min, duration_min)
+                cap = _slot_capacity()
+                if used + party_size > cap:
+                    cur.execute("ROLLBACK")
+                    remaining = max(0, cap - used)
+                    conn.close()
+                    return jsonify({'error': f'Not enough capacity in this slot', 'remaining': remaining, 'capacity': cap}), 409
+                # Save
+                cur.execute(
+                    """
+                    INSERT INTO cafe_bookings (user_id, date, time, party_size, note, status, created_at, duration_minutes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        int(session.get('user_id') or 0),
+                        date,
+                        time,
+                        party_size,
+                        note,
+                        'confirmed',
+                        _dt.utcnow().isoformat(),
+                        duration_min
+                    )
                 )
-            )
-            conn.commit()
-            bid = cur.lastrowid
-            conn.close()
-            return jsonify({'success': True, 'booking_id': bid, 'status': 'confirmed'})
-        except Exception as e:
-            return jsonify({'error': f'Failed to save booking: {e}'}), 500
+                cur.execute("COMMIT")
+                bid = cur.lastrowid
+                conn.close()
+                return jsonify({'success': True, 'booking_id': bid, 'status': 'confirmed'})
+            except Exception as e:
+                try:
+                    cur.execute("ROLLBACK")
+                except Exception:
+                    pass
+                conn.close()
+                return jsonify({'error': f'Failed to save booking: {e}'}), 500
 
     @app.route('/api/cafe/bookings', methods=['GET'])
     def cafe_my_bookings():
@@ -1427,7 +1570,7 @@ def create_app(config=None):
             return "Forbidden: Admins only", 403
 
         # Purchases summary (games.db)
-        games_dbp = os.path.join(app.instance_path, 'games.db')
+        games_dbp = _unified_db_path()
         purchases = []
         totals = { 'orders': 0, 'revenue': 0.0 }
         method_totals = {}
@@ -1552,7 +1695,7 @@ def create_app(config=None):
             return redirect(url_for('login'))
         if not _is_admin():
             return "Forbidden: Admins only", 403
-        games_dbp = os.path.join(app.instance_path, 'games.db')
+        games_dbp = _unified_db_path()
         rows = []
         try:
             gconn = sqlite3.connect(games_dbp)
@@ -1604,8 +1747,7 @@ def create_app(config=None):
     }
 
     def _constellation_db_path():
-        os.makedirs(app.instance_path, exist_ok=True)
-        return os.path.join(app.instance_path, 'constellation.db')
+        return _unified_db_path()
 
     def _ensure_constellation_tables(conn):
         cur = conn.cursor()

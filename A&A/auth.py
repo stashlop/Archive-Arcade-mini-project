@@ -10,7 +10,7 @@ auth_bp = Blueprint('auth', __name__)
 def get_db_path():
     inst = current_app.instance_path if hasattr(current_app, 'instance_path') else 'instance'
     Path(inst).mkdir(parents=True, exist_ok=True)
-    return os.path.join(inst, 'users.db')
+    return os.path.join(inst, 'arcade.db')
 
 def get_conn():
     dbp = get_db_path()
@@ -36,7 +36,16 @@ def init_db(conn=None):
     if close_after:
         conn.close()
 
-# Replace the blueprint-level decorator with an explicit initializer:
+def is_authenticated():
+    return bool(session.get('user_id') or session.get('user') or session.get('username'))
+
+def current_user_id():
+    return session.get('user_id')
+
+def current_username():
+    return session.get('username') or session.get('user')
+
+# Explicit initializer
 def init_app(app):
     """
     Ensure users DB is initialized. Call from your create_app() after app is created:
@@ -73,6 +82,7 @@ def signup():
     session.clear()
     session['user_id'] = uid
     session['username'] = username
+    session['user'] = username
     flash('Signup successful. You are logged in.', 'success')
     return redirect(url_for('home') if 'home' in current_app.view_functions else '/')
 
@@ -80,7 +90,7 @@ def signup():
 def login():
     if request.method == 'GET':
         # If already logged in, go home
-        if session.get('user_id'):
+        if session.get('user_id') or session.get('user') or session.get('username'):
             return redirect(url_for('home') if 'home' in current_app.view_functions else '/')
         return render_template('login.html')
 
@@ -107,6 +117,7 @@ def login():
     session.clear()
     session['user_id'] = row['id']
     session['username'] = row['username']
+    session['user'] = row['username']
     flash('Welcome back!', 'success')
 
     # Use a simpler redirect approach to avoid potential errors
@@ -124,7 +135,7 @@ def login_required(view):
     """Decorator for route handlers that require an authenticated user."""
     @wraps(view)
     def wrapped(*args, **kwargs):
-        if not session.get('user_id'):
+        if not (session.get('user_id') or session.get('user') or session.get('username')):
             # preserve requested path in `next` so user can return after login
             return redirect(url_for('login', next=request.path))
         return view(*args, **kwargs)

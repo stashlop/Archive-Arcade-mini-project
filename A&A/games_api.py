@@ -8,7 +8,7 @@ games_bp = Blueprint('games_api', __name__)
 def get_db_path():
     inst = current_app.instance_path if hasattr(current_app, 'instance_path') else 'instance'
     Path(inst).mkdir(parents=True, exist_ok=True)
-    return os.path.join(inst, 'games.db')
+    return os.path.join(inst, 'arcade.db')
 
 def init_purchase_history_db(conn):
     """
