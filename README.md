@@ -1,187 +1,227 @@
-# Arcade — Final Project
-live link https://archive-arcade-mini-project.onrender.com
-An end-to-end Flask app that blends a curated Books catalog, a Video Games shop with cart and demo checkout, a Cafe booking system, an Admin dashboard with revenue insights, and a Community page for email-based joining and admin updates. Modern glass UI with background videos and a unified header across pages.
+# 🎮 Archive Arcade — Final Project
 
-## ✨ Features
+[![Python](https://img.shields.io/badge/Python-3.12-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![Flask](https://img.shields.io/badge/Flask-3.x-black.svg?logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
+[![SQLite](https://img.shields.io/badge/Database-SQLite%20%2F%20SQLAlchemy-003B57.svg?logo=sqlite&logoColor=white)](https://sqlite.org/)
+[![Render](https://img.shields.io/badge/Deploy-Render-46E3B7.svg?logo=render&logoColor=white)](https://render.com)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Render%20App-brightgreen.svg)](https://archive-arcade-mini-project.onrender.com)
 
-- Accounts and access
-	- Signup, login, logout. Shared glass UI header across all pages.
-	- Admin detection: username `admin`, first user (ID=1), or usernames in env `ADMIN_USERS`.
-	- Header greets logged-in users by display name if set.
+**Live Demo**: [https://archive-arcade-mini-project.onrender.com](https://archive-arcade-mini-project.onrender.com)
 
-- Books catalog (`/books`)
-	- Filter by category and search by title/author/description.
-	- Add to cart (Buy or Rent). Background video and glass cards.
-<img width="1518" height="906" alt="Screenshot 2025-10-27 223130" src="https://github.com/user-attachments/assets/a04c7548-62b0-43ae-99fa-1e3ae5be1018" />
+**Archive Arcade** is an end-to-end full-stack Flask web application blending an interactive multimedia Books catalog, a Video Games store with real-time cart and demo checkout, a Cafe table-booking reservation system, an Admin intelligence dashboard with revenue trends, a Community hub for announcements and profiles, and a collaborative **Knowledge Constellation** network graph and real-time chat.
 
-- Video games shop (`/video_games`)
-	- Tag-style categories, search, add to cart (Buy or Rent).
-	- Background video and glass cards UI.
-<img width="1913" height="905" alt="Screenshot 2025-10-27 224003" src="https://github.com/user-attachments/assets/651a8453-1a3d-4bf4-87d8-bd8bea930283" />
+---
 
-- Cart, checkout, and history
-	- Cart: add/remove/clear, dynamic header count.
-	- Checkout (`/checkout`): choose Card/UPI/COD/Demo; persisted to `purchase_history` in `instance/games.db`.
-	- History (`/history`): view past purchases.
+## ✨ Features Overview
 
-- Cafe system (`/cafe`)
-	- Availability rules: Sunday closed; Saturday members-only note.
-	- Slot listing with capacity and default durations; booking with overlap checks.
-	- View/cancel “My Bookings.” Frosted black glass visuals.
-<img width="1910" height="906" alt="Screenshot 2025-10-27 224019" src="https://github.com/user-attachments/assets/e2e82065-9609-401f-9045-c50f5454ec83" />
+### 1. 📚 Books Catalog (`/books`)
+- Filter by media type (Manga, Light Novels, Traditional Novels, Technical Books, Non-Fiction) and search by title, author, or description.
+- Add items to Cart with options to **Buy** or **Rent**.
+- Sleek frosted glass cards with synchronized background video.
 
-- Admin dashboard (`/admin`)
-	- Totals, revenue by payment method, revenue by day (trend bars).
-	- Purchase list with method tags; cafe bookings; derived members ranking.
-	- CSV export at `/admin/revenue.csv`.
-	- Background videos play sequentially on admin: `books.mp4` → `videogames.mp4`.
+### 2. 🕹️ Video Games Store (`/video_games`)
+- Filter games by category and tags with dynamic search.
+- Buy or rent games directly into the persistent cart session.
+- Glassmorphic card layouts with rich game cover imagery.
 
-- Community page (`/community`)
-	- Join via email from Home; no login required. Stores `community_email` in session.
-	- Updates feed: admins can post; all members can read.
-	- Members panel: lists subscribers (emails masked for non-admins) with avatars.
-	- Profile: set display name and upload photo; mirrored to User account if logged in.
-	- Logged-in users can change account username.
-<img width="1465" height="894" alt="Screenshot 2025-10-27 223105" src="https://github.com/user-attachments/assets/5a3e0ad7-31b3-48d1-8ab0-420e4bfe92b3" />
+### 3. 🛒 Cart, Checkout & Order Tracking (`/cart`, `/checkout`, `/history`)
+- **Real-time Cart**: Add, update quantity, remove, or clear items with automatic header count updates.
+- **INR Currency Conversion**: Dynamic automatic USD-to-INR conversions with currency symbol formatting.
+- **Checkout (`/checkout`)**: Choose between Card, UPI, Cash-on-Delivery (COD), or Demo payment.
+- **Order Lifecycle (`/history`)**: Track delivery progression (`Processing` ➔ `Out for delivery` ➔ `Delivered`).
 
+### 4. ☕ Cafe Booking System (`/cafe`)
+- Slot capacity calculation with overlap checks and duration options (30 to 240 minutes).
+- Automated operating schedules (Closed Sundays, Saturday members-only notes).
+- Customer portal to view and cancel personal bookings.
+
+### 5. 🌌 Knowledge Constellation & Social Hub (`/constellation`)
+- **Social Graph Visualization**: Explore connections between concepts, topics, and users in an interactive 2D node-edge constellation.
+- **Private & Peer Messaging**: Send messages and exchange ideas with integrated file attachments (PDFs, images, documents).
+- **Friend Requests & User Discovery**: Send, accept, or decline friend requests with dynamic user tagging (`#0000`).
+- **Cloud Attachment Storage**: Optional integration with Cloudinary for persistent media uploads.
+
+### 6. 📊 Admin Intelligence Dashboard (`/admin`)
+- Metric totals: aggregate revenue, order counts, and cafe seat utilization.
+- Payment method breakdown & revenue trends by day.
+- Manage order status updates (`Processing`, `Out for delivery`, `Delivered`).
+- Export full transaction and revenue records to CSV (`/admin/revenue.csv`).
+- Seamless background video transitions (`books.mp4` ➔ `videogames.mp4`).
+
+### 7. 👥 Community Hub (`/community`)
+- Email-based subscriptions directly from the landing page without requiring immediate registration.
+- Broadcast announcements feed: Admins post bulletins; community members interact.
+- Member directory with privacy-masked email addresses and custom avatars.
+- Profile settings: Update display names, profile avatars, and account credentials.
+
+### 8. 📱 Cross-Device WiFi / LAN Testing (`run_local.py`)
+- Automated network detection allows running the application on `0.0.0.0` to test instantly on mobile devices or other PCs over local WiFi.
+- Built-in CORS support and a diagnostic endpoint at `/api/network-status`.
+
+---
 
 ## 🧱 Tech Stack
 
-- Python 3.12, Flask 3.x
-- Flask-SQLAlchemy for `users.db` (User model)
-- SQLite (raw) for `books.db`, `games.db` (purchase history), `cafe.db`, `community.db`
-- HTML + Jinja2 templates, CSS glass design, small vanilla JS
+- **Backend**: Python 3.12, Flask 3.x, Flask-SQLAlchemy, Werkzeug, Gunicorn
+- **Frontend**: HTML5, Jinja2 Templates, Vanilla JavaScript, CSS3 Glassmorphism design system
+- **Databases**: SQLite (multi-store instance databases), optional PostgreSQL via SQLAlchemy, optional MongoDB sync
+- **Media & Assets**: Cloudinary SDK (cloud asset storage), HTML5 Video backgrounds, Spline 3D embeds
 
-## 📦 Setup
+---
 
-1) Clone and enter the project
+## 📂 Project Structure
+
+```text
+Archive-Arcade-mini-project/
+├── A/                              # Media and book assets
+├── A&A/                            # Core Flask application package
+│   ├── static/                     # CSS stylesheets, images, video assets, uploads
+│   │   ├── arcade.css              # Glassmorphic component styling
+│   │   ├── style.css               # Core styling and typography
+│   │   └── uploads/                # Local avatar & constellation attachments
+│   ├── templates/                  # Jinja2 HTML templates
+│   │   ├── admin.html              # Admin intelligence dashboard
+│   │   ├── books.html              # Books catalog & filters
+│   │   ├── cafe.html               # Cafe slot booking interface
+│   │   ├── cart.html               # Shopping cart
+│   │   ├── checkout.html           # Payment checkout flow
+│   │   ├── community.html          # Community announcements & members
+│   │   ├── constellation.html      # Knowledge constellation network & chat
+│   │   ├── history.html            # Order history with delivery status
+│   │   ├── home.html / index.html  # Landing pages
+│   │   └── partials/               # Shared glass UI headers and footers
+│   ├── app.py                      # Application factory, routes, and main logic
+│   ├── auth.py                     # Authentication blueprint (SQLite)
+│   ├── books_api.py                # Books catalog blueprint & endpoints
+│   ├── cart_api.py                 # Shopping cart & checkout blueprint
+│   ├── games_api.py                # Video games catalog blueprint
+│   └── models.py                   # SQLAlchemy ORM models
+├── instance/                       # SQLite persistent databases (seed data)
+│   ├── books.db                    # Book catalog records
+│   ├── cafe.db                     # Cafe bookings & reservations
+│   ├── community.db                # Newsletter subscribers & community posts
+│   ├── constellation.db            # Constellation nodes, edges, chats, & messages
+│   ├── games.db                    # Games catalog & purchase order history
+│   └── users.db                    # User accounts, passwords & profiles
+├── NETWORK_TEST.md                 # Cross-device WiFi testing guide
+├── render.yaml                     # Render deployment configuration
+├── requirements.txt                # Python package dependencies
+├── run_local.py                    # Local dev runner with LAN/WiFi IP detection
+├── vercel.json                     # Vercel serverless deployment config
+└── wsgi.py                         # WSGI entry point
+```
+
+---
+
+## 📦 Getting Started
+
+### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/stashlop/Archive-Arcade-mini-project.git
 cd Archive-Arcade-mini-project
 ```
 
-2) Create a virtual environment and install deps
+### 2. Set Up Virtual Environment
 
 ```bash
+# Linux / macOS
 python3 -m venv .venv
-source .venv/bin/activate  # Linux/macOS
-# .venv\Scripts\activate  # Windows (PowerShell)
+source .venv/bin/activate
 
+# Windows (PowerShell)
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+```
+
+### 3. Install Dependencies
+
+```bash
 pip install -r requirements.txt
 ```
 
-3) Run the app (note: folder name contains an ampersand)
+### 4. Run the Application
 
+#### Option A: Quick Local / Multi-Device WiFi Runner (Recommended)
 ```bash
-python A\&A/app.py  # Linux/macOS
-# python "A&A/app.py"  # Windows
+python run_local.py
+```
+*Prints both `http://127.0.0.1:5000` (local) and your network LAN IP (e.g. `http://192.168.x.x:5000`) for instant mobile testing.*
+
+#### Option B: Standard Python Execution
+```bash
+# Linux / macOS
+python A\&A/app.py
+
+# Windows (PowerShell or Command Prompt)
+python "A&A/app.py"
 ```
 
-The app will start on http://127.0.0.1:5000 by default.
+The application will be accessible at [http://127.0.0.1:5000](http://127.0.0.1:5000).
 
-## � Admin access (demo)
+---
 
-- Default admin seeded on first run:
-	- Username: `admin`
-	- Password: `admin123`
-- You can also set:
-	- `ADMIN_DEFAULT_PASSWORD` to change the default admin password.
-	- `ADMIN_USERS` as a comma-separated list of additional admin usernames.
-- Admin-only pages and actions require login; an “Admin” link appears in the header when admin.
+## 🔐 Default Demo Accounts
 
-## ⚙️ Environment variables (optional)
+- **Admin Account**:
+  - **Username**: `admin`
+  - **Password**: `admin123`
+  - *Provides access to `/admin` and community administrative broadcasts.*
+- **Custom Admins**: Set the `ADMIN_USERS` environment variable as a comma-separated list of usernames to grant admin privileges.
 
-- `SECRET_KEY`: Flask secret (default: `dev-secret-key-change-me`)
-- `ADMIN_DEFAULT_PASSWORD`: seed password for admin
-- `ADMIN_USERS`: comma-separated usernames to grant admin
-- Cafe settings:
-	- `CAFE_OPEN` (default `10:00`)
-	- `CAFE_CLOSE` (default `22:00`)
-	- `CAFE_SLOT_STEP_MIN` (default `60`)
-	- `CAFE_DEFAULT_DURATION` (default `60`)
-	- `CAFE_SLOT_CAPACITY` (default `10`)
+---
 
-- Currency & pricing:
-	- `USD_TO_INR` — conversion rate used by the Jinja `inr` filter (default `83`). Catalog base prices (stored in USD) convert at render time; cart line item unit prices and purchase totals are stored already converted to INR.
+## ⚙️ Environment Variables
 
-- Persistence:
-	- `INSTANCE_PATH` — override Flask instance folder path (e.g. `/var/data/arcade-instance`) for deployments needing persistent disks.
+Create a `.env` file in the project root (see `.env.example`):
 
-## 🗄️ Data storage
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `SECRET_KEY` | `dev-secret-key-change-me` | Secret key for cryptographic session signing. Set securely in production! |
+| `ADMIN_DEFAULT_PASSWORD` | `admin123` | Default password used when seeding the initial `admin` user. |
+| `ADMIN_USERS` | `admin` | Comma-separated list of usernames granted admin status. |
+| `CAFE_OPEN` | `10:00` | Cafe opening time (HH:MM). |
+| `CAFE_CLOSE` | `22:00` | Cafe closing time (HH:MM). |
+| `CAFE_SLOT_CAPACITY` | `10` | Maximum party seats per time slot. |
+| `CAFE_DEFAULT_DURATION` | `60` | Default booking duration in minutes. |
+| `USD_TO_INR` | `83` | Currency conversion rate applied across catalog items and cart totals. |
+| `INSTANCE_PATH` | `./instance` | Directory for persistent SQLite databases (e.g. `/mnt/instance` on Render disk). |
+| `DATABASE_URL` | *(SQLite default)* | Optional PostgreSQL database URL for SQLAlchemy models. |
+| `CLOUDINARY_CLOUD_NAME` | *(optional)* | Cloudinary cloud identifier for cloud file uploads. |
+| `CLOUDINARY_API_KEY` | *(optional)* | Cloudinary API Key. |
+| `CLOUDINARY_API_SECRET` | *(optional)* | Cloudinary API Secret. |
+| `MONGODB_URI` | *(optional)* | Optional MongoDB connection string for hybrid database sync. |
 
-All databases live under `instance/` and are created automatically on first use:
+---
 
-- `users.db` — Flask-SQLAlchemy User table (username, password_hash, display_name, photo_path)
-- `books.db` — books catalog (seeded on first run)
-- `games.db` — purchase_history (writes on checkout)
-- `cafe.db` — cafe_bookings
-- `community.db` — community_subscribers, community_messages
+## 🚀 Deployment
 
-Purchase history now includes a `delivery_status` column with lifecycle values:
+### Deploy on Render (Recommended)
+This repository includes a pre-configured [`render.yaml`](render.yaml) blueprint:
+1. Connect your repository on [Render](https://dashboard.render.com/).
+2. Attach a Persistent Disk mounted at `/mnt/instance` to retain database state across restarts.
+3. Configure `INSTANCE_PATH = /mnt/instance` in your Render Environment Variables.
 
-- `Processing` (default when order is created)
-- `Out for delivery`
-- `Delivered` (admin endpoint maps `Success`/`Successful` inputs to `Delivered`)
+### Deploy on Vercel
+Configured via [`vercel.json`](vercel.json) using [`wsgi.py`](wsgi.py) as a serverless function handler. In serverless environments with read-only filesystems, storage automatically falls back to `/tmp`.
 
-Admins update status via the dashboard dropdown; users see a status badge beside each order in `/history`.
+---
 
-User-uploaded avatars are saved under `static/uploads/community/`.
+## 🛠️ Issue Tracking & Roadmap
 
-## 🌐 Main pages
+Active development tasks and tracked bugs are logged on GitHub:
 
-- `/` — About (background video)
-- `/books` — Books library (filters + add to cart)
-- `/video_games` — Video games (filters + add to cart)
-- `/cart` — Cart
-- `/checkout` — Choose payment method & complete demo purchase
-- `/history` — Purchase history
-- `/cafe` — Book slots; view/cancel your bookings
-- `/admin` — Dashboard (admins)
-- `/community` — Community updates, profile, members; admins can post
+- **[#2](https://github.com/stashlop/Archive-Arcade-mini-project/issues/2)**: [Bug] Session key mismatch between auth blueprint and cart/purchases APIs leads to 401 Unauthorized
+- **[#3](https://github.com/stashlop/Archive-Arcade-mini-project/issues/3)**: [Architecture / Bug] Constellation feature database mismatch: SQLAlchemy models target users.db while queries target constellation.db
+- **[#4](https://github.com/stashlop/Archive-Arcade-mini-project/issues/4)**: [Security] Insecure fallback SECRET_KEY and hardcoded production secret in render.yaml
+- **[#5](https://github.com/stashlop/Archive-Arcade-mini-project/issues/5)**: [Concurrency / Bug] Race condition in Cafe booking allows slot overbooking beyond capacity
+- **[#6](https://github.com/stashlop/Archive-Arcade-mini-project/issues/6)**: [Security] Missing CSRF protection on state-changing HTML forms and API routes
+- **[#7](https://github.com/stashlop/Archive-Arcade-mini-project/issues/7)**: [Architecture] Consolidate multi-database SQLite architecture and implement database migrations
+- **[#8](https://github.com/stashlop/Archive-Arcade-mini-project/issues/8)**: [Security / Reliability] Enforce MAX_CONTENT_LENGTH and strict MIME validation on file uploads
+- **[#9](https://github.com/stashlop/Archive-Arcade-mini-project/issues/9)**: [CI/CD & Testing] Add automated test suite (Pytest) and GitHub Actions CI workflow
 
-## 🔌 API endpoints (selected)
+---
 
-- Cart (`/api/cart/*`): `GET /`, `POST /add`, `POST /remove`, `POST /clear`, `POST /checkout`
-- Cafe:
-	- `GET /api/cafe/availability?date=YYYY-MM-DD`
-	- `GET /api/cafe/slots?date=YYYY-MM-DD`
-	- `POST /api/cafe/book` { date, time, partySize, duration, note }
-	- `GET /api/cafe/bookings` (mine)
-	- `DELETE /api/cafe/bookings/<id>`
-- Community:
-	- `POST /community/join` { email }
-	- `GET /api/community/messages` (list)
-	- `POST /api/community/messages` (admin-only)
-	- `GET /api/community/subscribers` (masked emails for non-admins)
-	- `POST /community/profile` (multipart: display_name, photo)
-	- `GET /api/community/me`
-	- `POST /account/username` { username } (logged-in users)
-- Admin:
-	- `GET /admin`
-	- `GET /admin/revenue.csv`
+## 📄 License
 
-## ♻️ Resetting data
-
-To reset all local databases (they’ll recreate on next run):
-
-```bash
-rm -f instance/*.db
-```
-
-Optionally clear uploaded avatars:
-
-```bash
-rm -f A\&A/static/uploads/community/*  # Linux/macOS
-# del "A&A\static\uploads\community\*"  # Windows
-```
-
-## 🧭 Notes & tips
-
-- Background videos: `books.mp4`, `videogames.mp4`, and `about.mp4` are used across pages; admin page plays books → videogames in sequence.
-- The app self-heals missing DB columns (for safe upgrades) and seeds defaults on first run.
-- Because the app folder has an ampersand (`A&A`), prefer running with the direct Python path as shown above.
-
-## ✅ Status
-
-This is a complete, runnable demo showcasing catalog + commerce flow (with INR conversion and delivery status tracking), bookings, admin dashboards, and community messaging with profiles, wrapped in a cohesive glass UI.
+This project is developed for educational and demonstration purposes. Contributions, feedback, and pull requests are welcome!
