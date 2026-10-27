@@ -9,6 +9,7 @@ import urllib.error
 from flask import Flask, render_template, request, session, redirect, url_for, flash, jsonify, make_response
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
+import dbconn
 from models import db, User, ConstellationChat, ConstellationMessage, IdeaMessage, ConstellationNode, IdeaNode, ConstellationEdge, IdeaEdge
 
 from sqlalchemy import text, func
@@ -87,10 +88,23 @@ def create_app(config=None):
         except OSError:
             pass
 
+    # Vercel's Postgres / Neon integration exposes POSTGRES_URL; accept either name.
+    database_url = (os.getenv('DATABASE_URL') or os.getenv('POSTGRES_URL') or '').strip()
+    if database_url.startswith('postgres://'):
+        database_url = database_url.replace('postgres://', 'postgresql+psycopg://', 1)
+    elif database_url.startswith('postgresql://') and '+psycopg' not in database_url.split('://', 1)[0]:
+        database_url = database_url.replace('postgresql://', 'postgresql+psycopg://', 1)
+
     secret = os.getenv("SECRET_KEY")
     if not secret:
         if app.debug or os.environ.get('FLASK_ENV') == 'development' or os.environ.get('TESTING') == '1':
             app.secret_key = "dev-secret-key-change-me"
+        elif os.environ.get('VERCEL') == '1' and database_url:
+            # Every serverless instance must sign sessions with the same key, otherwise
+            # users get logged out whenever a request lands on a different instance.
+            import hashlib
+            app.logger.warning("SECRET_KEY is not set; deriving one from DATABASE_URL. Set SECRET_KEY in Vercel.")
+            app.secret_key = hashlib.sha256(('arcade-session:' + database_url).encode()).hexdigest()
         else:
             import secrets
             app.secret_key = secrets.token_hex(32)
@@ -98,23 +112,26 @@ def create_app(config=None):
         app.secret_key = secret
 
     app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
-    
-    database_url = (os.getenv('DATABASE_URL') or '').strip()
-    if database_url.startswith('postgres://'):
-        database_url = database_url.replace('postgres://', 'postgresql+psycopg://', 1)
-    elif database_url.startswith('postgresql://') and '+psycopg' not in database_url.split('://', 1)[0]:
-        database_url = database_url.replace('postgresql://', 'postgresql+psycopg://', 1)
 
-    if database_url:
+    if app.config.get('SQLALCHEMY_DATABASE_URI'):
+        pass  # explicitly configured (e.g. tests)
+    elif database_url:
         app.config['SQLALCHEMY_DATABASE_URI'] = database_url
     else:
+        if os.environ.get('VERCEL') == '1':
+            app.logger.warning("DATABASE_URL is not set; using SQLite in /tmp. Data will NOT persist on Vercel.")
         # Safely construct absolute URI for SQLAlchemy pointing to unified arcade.db
         db_path = os.path.join(app.instance_path, 'arcade.db').replace('\\', '/')
         uri_prefix = 'sqlite:////' if db_path.startswith('/') else 'sqlite:///'
         app.config['SQLALCHEMY_DATABASE_URI'] = uri_prefix + db_path.lstrip('/')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    if app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgres'):
+        # Serverless functions are frozen between requests; drop dead connections instead of erroring.
+        app.config.setdefault('SQLALCHEMY_ENGINE_OPTIONS', {'pool_pre_ping': True, 'pool_recycle': 300})
 
     db.init_app(app)
+    with app.app_context():
+        dbconn.register_engine_events(db.engine)
     from flask_migrate import Migrate
     migrate = Migrate(app, db)
 
@@ -258,6 +275,32 @@ def create_app(config=None):
         except Exception as exc:
             return None, str(exc)
 
+    def _store_upload(file_obj, subdir, filename, resource_type='auto'):
+        """Save an upload to Cloudinary when configured, else under static/uploads.
+
+        Returns (stored_path, error); stored_path is a full URL for Cloudinary or a
+        path relative to /static for local files.
+        """
+        if _cloudinary_configured():
+            return _cloudinary_upload(file_obj, folder=subdir, resource_type=resource_type)
+        upload_dir = os.path.join(app.static_folder, 'uploads', subdir)
+        try:
+            os.makedirs(upload_dir, exist_ok=True)
+            file_obj.save(os.path.join(upload_dir, filename))
+        except OSError:
+            # Vercel (and most serverless hosts) only allow writes to /tmp
+            return None, ('File uploads need Cloudinary on this host. '
+                          'Add CLOUDINARY_URL to your environment variables (free at cloudinary.com).')
+        return f'uploads/{subdir}/{filename}', None
+
+    def _media_url(path):
+        """URL for a stored upload path (Cloudinary URL or file under /static)."""
+        if not path:
+            return None
+        if path.startswith(('http://', 'https://', '/')):
+            return path
+        return url_for('static', filename=path)
+
     def _mongo_key(username):
         return (username or '').strip().lower()
 
@@ -369,6 +412,9 @@ def create_app(config=None):
         return {'nodes': out_nodes, 'edges': out_edges}
 
     def _migrate_legacy_data(app_inst):
+        # Imports the old per-feature SQLite files; nothing to do on PostgreSQL.
+        if dbconn.is_postgres():
+            return
         inst = app_inst.instance_path
         unified = os.path.join(inst, 'arcade.db')
         if not os.path.exists(unified):
@@ -464,14 +510,6 @@ def create_app(config=None):
                     try: cur.execute("DETACH DATABASE legacy_const")
                     except Exception: pass
 
-            # Compatibility Views
-            try:
-                cur.execute("CREATE VIEW IF NOT EXISTS user AS SELECT * FROM users")
-                cur.execute("CREATE VIEW IF NOT EXISTS chats AS SELECT * FROM constellation_chats")
-                cur.execute("CREATE VIEW IF NOT EXISTS messages AS SELECT * FROM constellation_messages")
-            except Exception:
-                pass
-
             conn.commit()
             conn.close()
         except Exception:
@@ -479,52 +517,71 @@ def create_app(config=None):
 
     @app.before_request
     def create_tables():
-        if not hasattr(app, 'db_initialized'):
-            db.create_all()
-            _migrate_legacy_data(app)
-            init_books_db()  # Initialize books database
-            try:
-                from games_api import init_db as init_games_db
-                gconn = sqlite3.connect(_unified_db_path())
-                init_games_db(gconn)
-                gconn.close()
-            except Exception:
-                pass
+        if hasattr(app, 'db_initialized'):
+            return
+        if dbconn.is_postgres():
+            # Several serverless instances can cold-start at once; let only one
+            # create tables and seed the catalog at a time.
+            with db.engine.connect() as lock_conn:
+                lock_conn.exec_driver_sql('SELECT pg_advisory_lock(727275)')
+                try:
+                    _initialize_database()
+                finally:
+                    lock_conn.exec_driver_sql('SELECT pg_advisory_unlock(727275)')
+                    lock_conn.commit()
+        else:
+            _initialize_database()
+        app.db_initialized = True
 
-            # Self-heal User table to ensure profile columns exist
-            try:
-                with db.engine.begin() as conn:
-                    user_table = User.__tablename__
-                    quoted_user_table = '"' + user_table.replace('"', '""') + '"'
-                    cols = [row[1] for row in conn.exec_driver_sql(f'PRAGMA table_info({quoted_user_table})').fetchall()]
-                    if 'display_name' not in cols:
-                        conn.exec_driver_sql(f'ALTER TABLE {quoted_user_table} ADD COLUMN display_name VARCHAR(120)')
-                    if 'photo_path' not in cols:
-                        conn.exec_driver_sql(f'ALTER TABLE {quoted_user_table} ADD COLUMN photo_path VARCHAR(255)')
-                    if 'user_tag' not in cols:
-                        conn.exec_driver_sql(f'ALTER TABLE {quoted_user_table} ADD COLUMN user_tag VARCHAR(4)')
-                    if 'email' not in cols:
-                        conn.exec_driver_sql(f'ALTER TABLE {quoted_user_table} ADD COLUMN email VARCHAR(255)')
-            except Exception:
-                pass
-            try:
-                for user in User.query.filter((User.user_tag == None) | (User.user_tag == '')).all():
-                    user.user_tag = _generate_user_tag()
+    def _initialize_database():
+        db.create_all()
+        _migrate_legacy_data(app)
+        init_books_db()  # Initialize books database
+        try:
+            from games_api import init_db as init_games_db
+            gconn = dbconn.connect(_unified_db_path())
+            init_games_db(gconn)
+            gconn.close()
+        except Exception:
+            app.logger.exception("Failed to initialize games tables")
+
+        # Self-heal User table to ensure profile columns exist
+        try:
+            from sqlalchemy import inspect as _sa_inspect
+            with db.engine.begin() as conn:
+                user_table = User.__tablename__
+                quoted_user_table = '"' + user_table.replace('"', '""') + '"'
+                cols = [c['name'] for c in _sa_inspect(conn).get_columns(user_table)]
+                if 'display_name' not in cols:
+                    conn.exec_driver_sql(f'ALTER TABLE {quoted_user_table} ADD COLUMN display_name VARCHAR(120)')
+                if 'photo_path' not in cols:
+                    conn.exec_driver_sql(f'ALTER TABLE {quoted_user_table} ADD COLUMN photo_path VARCHAR(255)')
+                if 'user_tag' not in cols:
+                    conn.exec_driver_sql(f'ALTER TABLE {quoted_user_table} ADD COLUMN user_tag VARCHAR(4)')
+                if 'email' not in cols:
+                    conn.exec_driver_sql(f'ALTER TABLE {quoted_user_table} ADD COLUMN email VARCHAR(255)')
+                if dbconn.is_postgres():
+                    # Older schemas used VARCHAR(128), too short for scrypt password hashes
+                    conn.exec_driver_sql(f'ALTER TABLE {quoted_user_table} ALTER COLUMN password_hash TYPE VARCHAR(255)')
+        except Exception:
+            app.logger.exception("Failed to update the users table schema")
+        try:
+            for user in User.query.filter((User.user_tag == None) | (User.user_tag == '')).all():
+                user.user_tag = _generate_user_tag()
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+        # Ensure a default admin user exists for demo access
+        try:
+            if not User.query.filter_by(username='admin').first():
+                admin_pw = os.getenv('ADMIN_DEFAULT_PASSWORD', 'admin123')
+                admin_user = User(username='admin', email='admin@arcade.local', password_hash=generate_password_hash(admin_pw), user_tag=_generate_user_tag())
+                db.session.add(admin_user)
                 db.session.commit()
-            except Exception:
-                db.session.rollback()
-            # Ensure a default admin user exists for demo access
-            try:
-                if not User.query.filter_by(username='admin').first():
-                    admin_pw = os.getenv('ADMIN_DEFAULT_PASSWORD', 'admin123')
-                    admin_user = User(username='admin', email='admin@arcade.local', password_hash=generate_password_hash(admin_pw), user_tag=_generate_user_tag())
-                    db.session.add(admin_user)
-                    db.session.commit()
-            except Exception:
-                db.session.rollback()
-                # Do not block app startup if seeding fails
-                pass
-            app.db_initialized = True
+        except Exception:
+            db.session.rollback()
+            # Do not block app startup if seeding fails
+            pass
 
     @app.context_processor
     def inject_cart_count():
@@ -576,6 +633,19 @@ def create_app(config=None):
                 cur.execute("ALTER TABLE community_subscribers ADD COLUMN display_name TEXT")
             if 'photo_path' not in cols:
                 cur.execute("ALTER TABLE community_subscribers ADD COLUMN photo_path TEXT")
+            conn.commit()
+        except Exception:
+            pass
+        # Older databases created community_messages from a model without these columns
+        try:
+            cur.execute("PRAGMA table_info(community_messages)")
+            cols = {r[1] for r in cur.fetchall()}
+            if 'user_id' not in cols:
+                cur.execute("ALTER TABLE community_messages ADD COLUMN user_id INTEGER")
+            if 'author' not in cols:
+                cur.execute("ALTER TABLE community_messages ADD COLUMN author TEXT")
+            if 'is_admin' not in cols:
+                cur.execute("ALTER TABLE community_messages ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
             conn.commit()
         except Exception:
             pass
@@ -649,7 +719,7 @@ def create_app(config=None):
                     cem = (session.get('community_email') or '').strip().lower()
                     if cem:
                         dbp = _community_db_path()
-                        conn = sqlite3.connect(dbp)
+                        conn = dbconn.connect(dbp)
                         _ensure_community_tables(conn)
                         cur = conn.cursor()
                         cur.execute("UPDATE community_subscribers SET user_id=? WHERE email=?", (int(user.id), cem))
@@ -695,7 +765,7 @@ def create_app(config=None):
                     cem = (session.get('community_email') or '').strip().lower()
                     if cem:
                         dbp = _community_db_path()
-                        conn = sqlite3.connect(dbp)
+                        conn = dbconn.connect(dbp)
                         _ensure_community_tables(conn)
                         cur = conn.cursor()
                         cur.execute("UPDATE community_subscribers SET user_id=? WHERE email=?", (int(new_user.id), cem))
@@ -723,8 +793,8 @@ def create_app(config=None):
         
         try:
             # Get books from database
-            dbp = os.path.join(app.instance_path, 'books.db')
-            conn = sqlite3.connect(dbp)
+            dbp = _unified_db_path()
+            conn = dbconn.connect(dbp)
             conn.row_factory = sqlite3.Row
 
             # Get filter parameters
@@ -784,13 +854,11 @@ def create_app(config=None):
         
         try:
             # Get games from database
-            dbp = os.path.join(app.instance_path, 'games.db')
-            conn = sqlite3.connect(dbp)
+            dbp = _unified_db_path()
+            conn = dbconn.connect(dbp)
             conn.row_factory = sqlite3.Row
 
-            # Check if games table exists, if not create it
             cur = conn.cursor()
-            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='games'")
             # Shared seed data
             sample_games = [
                 ("Baldur's Gate 3", "Epic CRPG adventure with deep choices and co-op.", "RPG,Co-op", 59.99, 9.99, "images/games/Baldurs_Gate_3.jpeg"),
@@ -802,34 +870,26 @@ def create_app(config=None):
                 ("Silent Hill 2 (Remake)", "Reimagined survival-horror classic.", "Horror,Survival", 39.99, 8.49, "images/games/hill.jpeg"),
                 ("God of War", "A mythic reimagining: father, son, and monsters.", "Action,Adventure", 29.99, 6.99, "images/games/god.jpeg")
             ]
-            if not cur.fetchone():
-                # Table doesn't exist, create and seed it
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS games (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        title TEXT NOT NULL,
-                        description TEXT,
-                        category TEXT,
-                        buy_price REAL DEFAULT 0,
-                        rent_price REAL DEFAULT 0,
-                        image TEXT
-                    )
-                """)
+            # Create the table if needed and seed it when empty (e.g., after a reset)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS games (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    description TEXT,
+                    category TEXT,
+                    buy_price REAL DEFAULT 0,
+                    rent_price REAL DEFAULT 0,
+                    image TEXT
+                )
+            """)
+            cur.execute("SELECT COUNT(*) FROM games")
+            if int(cur.fetchone()[0] or 0) == 0:
                 cur.executemany("""
-                    INSERT INTO games (title, description, category, buy_price, rent_price, image) 
+                    INSERT INTO games (title, description, category, buy_price, rent_price, image)
                     VALUES (?, ?, ?, ?, ?, ?)
                 """, sample_games)
                 conn.commit()
-            else:
-                # Table exists but may be empty (e.g., after a reset) -> seed if empty
-                cur.execute("SELECT COUNT(*) FROM games")
-                if int(cur.fetchone()[0] or 0) == 0:
-                    cur.executemany("""
-                        INSERT INTO games (title, description, category, buy_price, rent_price, image)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    """, sample_games)
-                    conn.commit()
-                
+
             # Optional filters
             category = request.args.get('category', '').strip()
             search = request.args.get('search', '').strip()
@@ -895,8 +955,8 @@ def create_app(config=None):
             return "Forbidden: Admins only", 403
         force = (request.args.get('force') or '').strip().lower() in ('1', 'true', 'yes')
         try:
-            dbp = os.path.join(app.instance_path, 'games.db')
-            conn = sqlite3.connect(dbp)
+            dbp = _unified_db_path()
+            conn = dbconn.connect(dbp)
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
             # Ensure table exists
@@ -1111,7 +1171,7 @@ def create_app(config=None):
         slots = []
         try:
             dbp = _cafe_db_path()
-            conn = sqlite3.connect(dbp)
+            conn = dbconn.connect(dbp)
             conn.row_factory = sqlite3.Row
             _ensure_cafe_tables(conn)
             cur = conn.cursor()
@@ -1159,7 +1219,7 @@ def create_app(config=None):
         from datetime import datetime as _dt
         with app._cafe_booking_lock:
             dbp = _cafe_db_path()
-            conn = sqlite3.connect(dbp, timeout=30.0, isolation_level=None)
+            conn = dbconn.connect(dbp, timeout=30.0, isolation_level=None)
             conn.row_factory = sqlite3.Row
             _ensure_cafe_tables(conn)
             cur = conn.cursor()
@@ -1209,7 +1269,7 @@ def create_app(config=None):
             return jsonify({'error': 'Authentication required'}), 401
         try:
             dbp = _cafe_db_path()
-            conn = sqlite3.connect(dbp)
+            conn = dbconn.connect(dbp)
             conn.row_factory = sqlite3.Row
             _ensure_cafe_tables(conn)
             cur = conn.cursor()
@@ -1229,7 +1289,7 @@ def create_app(config=None):
             return jsonify({'error': 'Authentication required'}), 401
         try:
             dbp = _cafe_db_path()
-            conn = sqlite3.connect(dbp)
+            conn = dbconn.connect(dbp)
             conn.row_factory = sqlite3.Row
             _ensure_cafe_tables(conn)
             cur = conn.cursor()
@@ -1301,7 +1361,7 @@ def create_app(config=None):
         from datetime import datetime as _dt
         try:
             dbp = _community_db_path()
-            conn = sqlite3.connect(dbp)
+            conn = dbconn.connect(dbp)
             conn.row_factory = sqlite3.Row
             _ensure_community_tables(conn)
             cur = conn.cursor()
@@ -1323,7 +1383,7 @@ def create_app(config=None):
             # Public feed, but page access controls viewing UI
             try:
                 dbp = _community_db_path()
-                conn = sqlite3.connect(dbp)
+                conn = dbconn.connect(dbp)
                 conn.row_factory = sqlite3.Row
                 _ensure_community_tables(conn)
                 cur = conn.cursor()
@@ -1343,7 +1403,7 @@ def create_app(config=None):
         from datetime import datetime as _dt
         try:
             dbp = _community_db_path()
-            conn = sqlite3.connect(dbp)
+            conn = dbconn.connect(dbp)
             conn.row_factory = sqlite3.Row
             _ensure_community_tables(conn)
             cur = conn.cursor()
@@ -1372,7 +1432,7 @@ def create_app(config=None):
             is_admin_flag = False
         try:
             dbp = _community_db_path()
-            conn = sqlite3.connect(dbp)
+            conn = dbconn.connect(dbp)
             conn.row_factory = sqlite3.Row
             _ensure_community_tables(conn)
             cur = conn.cursor()
@@ -1391,7 +1451,7 @@ def create_app(config=None):
                 photo_url = None
                 if r['photo_path']:
                     try:
-                        photo_url = url_for('static', filename=r['photo_path'])
+                        photo_url = _media_url(r['photo_path'])
                     except Exception:
                         photo_url = None
                 rows.append({
@@ -1418,7 +1478,7 @@ def create_app(config=None):
         from datetime import datetime as _dt
         try:
             dbp = _community_db_path()
-            conn = sqlite3.connect(dbp)
+            conn = dbconn.connect(dbp)
             conn.row_factory = sqlite3.Row
             _ensure_community_tables(conn)
             cur = conn.cursor()
@@ -1442,13 +1502,11 @@ def create_app(config=None):
                 if ext not in ('.png', '.jpg', '.jpeg', '.webp'):
                     conn.close()
                     return jsonify({'success': False, 'error': 'Only PNG, JPG, JPEG, WEBP allowed'}), 400
-                # Save under static/uploads/community
-                upload_dir = os.path.join(app.static_folder, 'uploads', 'community')
-                os.makedirs(upload_dir, exist_ok=True)
                 new_name = f"sub_{sub_id}{ext}"
-                abs_path = os.path.join(upload_dir, new_name)
-                photo.save(abs_path)
-                saved_rel_path = os.path.join('uploads', 'community', new_name)
+                saved_rel_path, err = _store_upload(photo, 'community', new_name, resource_type='image')
+                if err:
+                    conn.close()
+                    return jsonify({'success': False, 'error': err}), 503
 
             # Apply updates to subscriber
             if display_name:
@@ -1481,7 +1539,7 @@ def create_app(config=None):
             return jsonify({'error': 'Not joined'}), 404
         try:
             dbp = _community_db_path()
-            conn = sqlite3.connect(dbp)
+            conn = dbconn.connect(dbp)
             conn.row_factory = sqlite3.Row
             _ensure_community_tables(conn)
             cur = conn.cursor()
@@ -1493,7 +1551,7 @@ def create_app(config=None):
             photo_url = None
             if row['photo_path']:
                 try:
-                    photo_url = url_for('static', filename=row['photo_path'])
+                    photo_url = _media_url(row['photo_path'])
                 except Exception:
                     photo_url = None
             return jsonify({
@@ -1537,8 +1595,8 @@ def create_app(config=None):
     app.register_blueprint(auth_bp)
     app.register_blueprint(cart_bp)
 
-    # init auth DB after app exists
-    init_auth_db(app)
+    # The users table is created by db.create_all() on the first request, so the
+    # app can boot (e.g. a Vercel cold start) without touching the database.
 
     # Enforce login for restricted paths
     RESTRICTED_PREFIXES = (
@@ -1603,7 +1661,7 @@ def create_app(config=None):
         method_totals = {}
         daily_map = {}
         try:
-            gconn = sqlite3.connect(games_dbp)
+            gconn = dbconn.connect(games_dbp)
             gconn.row_factory = sqlite3.Row
             cur = gconn.cursor()
             cur.execute("SELECT COUNT(*) as c, IFNULL(SUM(total_amount),0) as s FROM purchase_history")
@@ -1637,10 +1695,10 @@ def create_app(config=None):
             purchases = []
 
         # Cafe bookings (cafe.db)
-        cafe_dbp = os.path.join(app.instance_path, 'cafe.db')
+        cafe_dbp = _unified_db_path()
         bookings = []
         try:
-            cconn = sqlite3.connect(cafe_dbp)
+            cconn = dbconn.connect(cafe_dbp)
             cconn.row_factory = sqlite3.Row
             cur = cconn.cursor()
             cur.execute("SELECT * FROM cafe_bookings ORDER BY date DESC, time DESC")
@@ -1706,8 +1764,8 @@ def create_app(config=None):
         if status_norm not in allowed:
             return jsonify({'error': 'Invalid status'}), 400
         try:
-            dbp = os.path.join(app.instance_path, 'games.db')
-            conn = sqlite3.connect(dbp)
+            dbp = _unified_db_path()
+            conn = dbconn.connect(dbp)
             cur = conn.cursor()
             cur.execute("UPDATE purchase_history SET delivery_status=? WHERE id=?", (status_norm, pid))
             conn.commit()
@@ -1725,7 +1783,7 @@ def create_app(config=None):
         games_dbp = _unified_db_path()
         rows = []
         try:
-            gconn = sqlite3.connect(games_dbp)
+            gconn = dbconn.connect(games_dbp)
             gconn.row_factory = sqlite3.Row
             cur = gconn.cursor()
             cur.execute("SELECT id, user_id, purchase_date, total_amount, COALESCE(payment_method,'Demo') as payment_method FROM purchase_history ORDER BY purchase_date DESC")
@@ -1779,7 +1837,7 @@ def create_app(config=None):
     def _ensure_constellation_tables(conn):
         cur = conn.cursor()
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS chats (
+            CREATE TABLE IF NOT EXISTS constellation_chats (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user1_id INTEGER NOT NULL,
                 user2_id INTEGER NOT NULL,
@@ -1799,7 +1857,7 @@ def create_app(config=None):
             )
         """)
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS messages (
+            CREATE TABLE IF NOT EXISTS constellation_messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 chat_id INTEGER NOT NULL,
                 sender_id INTEGER NOT NULL,
@@ -2108,14 +2166,14 @@ def create_app(config=None):
         cur = conn.cursor()
         a, b = (uid1, uid2) if uid1 < uid2 else (uid2, uid1)
         cur.execute(
-            "SELECT id FROM chats WHERE user1_id=? AND user2_id=?", (a, b)
+            "SELECT id FROM constellation_chats WHERE user1_id=? AND user2_id=?", (a, b)
         )
         row = cur.fetchone()
         if row:
             return row[0]
         from datetime import datetime as _dt
         cur.execute(
-            "INSERT INTO chats(user1_id, user2_id, created_at) VALUES(?,?,?)",
+            "INSERT INTO constellation_chats(user1_id, user2_id, created_at) VALUES(?,?,?)",
             (a, b, _dt.utcnow().isoformat())
         )
         conn.commit()
@@ -2218,7 +2276,7 @@ def create_app(config=None):
         me = int(session.get('user_id') or 0)
         try:
             dbp = _constellation_db_path()
-            conn = sqlite3.connect(dbp)
+            conn = dbconn.connect(dbp)
             conn.row_factory = sqlite3.Row
             _ensure_constellation_tables(conn)
             cur = conn.cursor()
@@ -2265,7 +2323,7 @@ def create_app(config=None):
         me = int(session.get('user_id') or 0)
         try:
             dbp = _constellation_db_path()
-            conn = sqlite3.connect(dbp)
+            conn = dbconn.connect(dbp)
             conn.row_factory = sqlite3.Row
             _ensure_constellation_tables(conn)
             cur = conn.cursor()
@@ -2333,7 +2391,7 @@ def create_app(config=None):
         handle = (data.get('handle') or '').strip()
         if '#' not in handle:
             return jsonify({'error': 'Enter the full username#0000'}), 400
-        if os.environ.get('VERCEL') == '1' and not os.getenv('DATABASE_URL'):
+        if os.environ.get('VERCEL') == '1' and not dbconn.is_postgres():
             return jsonify({
                 'error': 'Friend lookup needs a shared DATABASE_URL on Vercel. Local SQLite in /tmp is not shared between users.'
             }), 503
@@ -2345,7 +2403,7 @@ def create_app(config=None):
         from datetime import datetime as _dt
         try:
             dbp = _constellation_db_path()
-            conn = sqlite3.connect(dbp)
+            conn = dbconn.connect(dbp)
             conn.row_factory = sqlite3.Row
             _ensure_constellation_tables(conn)
             cur = conn.cursor()
@@ -2356,8 +2414,13 @@ def create_app(config=None):
             if status == 'pending':
                 conn.close()
                 return jsonify({'success': True, 'status': 'pending', 'message': 'Friend request already pending'})
+            # Replace any earlier (e.g. rejected) request between the same pair
             cur.execute(
-                """INSERT OR REPLACE INTO friend_requests(requester_id, receiver_id, status, created_at, responded_at)
+                "DELETE FROM friend_requests WHERE requester_id=? AND receiver_id=?",
+                (me, target.id)
+            )
+            cur.execute(
+                """INSERT INTO friend_requests(requester_id, receiver_id, status, created_at, responded_at)
                    VALUES(?,?,?,?,NULL)""",
                 (me, target.id, 'pending', _dt.utcnow().isoformat())
             )
@@ -2410,7 +2473,7 @@ def create_app(config=None):
         from datetime import datetime as _dt
         try:
             dbp = _constellation_db_path()
-            conn = sqlite3.connect(dbp)
+            conn = dbconn.connect(dbp)
             conn.row_factory = sqlite3.Row
             _ensure_constellation_tables(conn)
             cur = conn.cursor()
@@ -2555,7 +2618,7 @@ def create_app(config=None):
                     'file_type': msg.file_type
                 }
                 if msg.file_path:
-                    d['file_url'] = url_for('static', filename=msg.file_path) if not msg.file_path.startswith('/api/') else msg.file_path
+                    d['file_url'] = _media_url(msg.file_path)
                 rows.append(d)
             
             return jsonify(rows)
@@ -3021,19 +3084,14 @@ def create_app(config=None):
             if not chat or me not in (chat.user1_id, chat.user2_id):
                 return jsonify({'error': 'forbidden'}), 403
             
-            # Save file (with Vercel read-only filesystem fallback)
-            upload_dir = os.path.join(app.static_folder, 'uploads', 'constellation')
+            # Save file (Cloudinary when configured; static/uploads otherwise)
             now = _dt.utcnow()
-            unique_name = f"c{chat_id}_u{me}_{int(now.timestamp())}_{fname}"
-            abs_path = os.path.join(upload_dir, unique_name)
-
-            try:
-                os.makedirs(upload_dir, exist_ok=True)
-                file.save(abs_path)
-            except OSError:
-                pass  # Ignore Read-Only File System errors on Vercel
-
-            rel_path = 'uploads/constellation/' + unique_name
+            # Keep the stored path within the 255-char column limit (enforced by PostgreSQL)
+            unique_name = f"c{chat_id}_u{me}_{int(now.timestamp())}_{fname[-120:]}"
+            resource_type = 'image' if file_type == 'image' else 'raw'
+            rel_path, err = _store_upload(file, 'constellation', unique_name, resource_type=resource_type)
+            if err:
+                return jsonify({'error': err}), 503
             now_str = now.isoformat()
             
             # Insert message
@@ -3042,16 +3100,16 @@ def create_app(config=None):
                 sender_id=me,
                 content=None,
                 file_path=rel_path,
-                file_name=file.filename,
+                file_name=file.filename[:255],
                 file_type=file_type,
                 created_at=now_str
             )
             db.session.add(msg)
             db.session.flush()
             msg_id = msg.id
-            
+
             # Create a file node in the graph
-            node_label = file.filename
+            node_label = file.filename[:255]
             nid_file = ConstellationNode.query.filter_by(chat_id=chat_id, label=node_label).first()
             if not nid_file:
                 nid_file = ConstellationNode(chat_id=chat_id, label=node_label, node_type='file', source_message_id=msg_id, mention_count=1, created_at=now_str)
@@ -3116,7 +3174,7 @@ def create_app(config=None):
                     db.session.add(edge)
                     
             db.session.commit()
-            return jsonify({'success': True, 'id': msg_id, 'file_url': url_for('static', filename=rel_path)})
+            return jsonify({'success': True, 'id': msg_id, 'file_url': _media_url(rel_path)})
         except Exception as e:
             db.session.rollback()
             return jsonify({'error': str(e)}), 500

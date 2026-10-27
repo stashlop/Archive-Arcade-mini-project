@@ -451,7 +451,7 @@ async function loadUsers(){
       el.dataset.uid = u.id;
       const initials = (u.display_name || u.username || '?').charAt(0).toUpperCase();
       const photoHTML = u.photo_path
-        ? `<img src="/static/${u.photo_path}" alt="avatar"/>`
+        ? `<img src="${mediaUrl(u.photo_path)}" alt="avatar"/>`
         : initials;
       el.innerHTML = `<div class="c-avatar">${photoHTML}</div><div class="user-info"><div class="name">${escHtml(u.display_name || u.username)}</div><div class="sub">${escHtml(u.handle || ('@' + u.username))}</div></div>`;
       el.addEventListener('click', () => openChat(u));
@@ -466,6 +466,11 @@ async function loadUsers(){
   }
 }
 
+// Uploaded photos are either full (Cloudinary) URLs or paths under /static
+function mediaUrl(path){
+  return /^(https?:)?\/\//.test(path) ? path : '/static/' + path;
+}
+
 async function openChat(user){
   document.querySelectorAll('.user-item').forEach(el => {
     el.classList.toggle('active', String(el.dataset.uid) === String(user.id));
@@ -473,7 +478,7 @@ async function openChat(user){
   activeOtherUid = user.id;
   const initials = (user.display_name || user.username || '?').charAt(0).toUpperCase();
   document.getElementById('chat-avatar').innerHTML = user.photo_path
-    ? `<img src="/static/${user.photo_path}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>`
+    ? `<img src="${mediaUrl(user.photo_path)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>`
     : initials;
   document.getElementById('chat-name').textContent = user.display_name || user.username;
   document.getElementById('chat-sub').textContent = '@' + user.username;

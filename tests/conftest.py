@@ -15,10 +15,14 @@ def app():
     os.environ['INSTANCE_PATH'] = temp_dir
     os.environ['TESTING'] = '1'
     
+    # Set TEST_DATABASE_URL=postgresql+psycopg://... to run the suite against
+    # PostgreSQL (the database used on Vercel). Its tables are dropped afterwards.
+    db_uri = os.environ.get('TEST_DATABASE_URL') or \
+        f"sqlite:///{os.path.join(temp_dir, 'arcade.db').replace('\\', '/')}"
     app = create_app({
         'TESTING': True,
         'WTF_CSRF_ENABLED': False,
-        'SQLALCHEMY_DATABASE_URI': f"sqlite:///{os.path.join(temp_dir, 'arcade.db').replace('\\', '/')}"
+        'SQLALCHEMY_DATABASE_URI': db_uri
     })
     app.instance_path = temp_dir
     

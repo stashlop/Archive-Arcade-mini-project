@@ -1,0 +1,10 @@
+# Keep the serverless bundle small: local databases, tests and dev files aren't needed on Vercel
+instance/
+tests/
+A/
+**/__pycache__/
+A&A/static/uploads/
+NETWORK_TEST.md
+render.yaml
+run_local.py
+.vscode/

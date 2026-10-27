@@ -186,7 +186,8 @@ Create a `.env` file in the project root (see `.env.example`):
 | `CAFE_DEFAULT_DURATION` | `60` | Default booking duration in minutes. |
 | `USD_TO_INR` | `83` | Currency conversion rate applied across catalog items and cart totals. |
 | `INSTANCE_PATH` | `./instance` | Directory for persistent SQLite databases (e.g. `/mnt/instance` on Render disk). |
-| `DATABASE_URL` | *(SQLite default)* | Optional PostgreSQL database URL for SQLAlchemy models. |
+| `DATABASE_URL` | *(SQLite default)* | PostgreSQL URL used for **all** app data (`POSTGRES_URL` is also accepted). Required on Vercel. |
+| `CLOUDINARY_URL` | *(optional)* | Cloudinary URL (`cloudinary://key:secret@cloud`); needed for uploads on Vercel. |
 | `CLOUDINARY_CLOUD_NAME` | *(optional)* | Cloudinary cloud identifier for cloud file uploads. |
 | `CLOUDINARY_API_KEY` | *(optional)* | Cloudinary API Key. |
 | `CLOUDINARY_API_SECRET` | *(optional)* | Cloudinary API Secret. |
@@ -203,7 +204,14 @@ This repository includes a pre-configured [`render.yaml`](render.yaml) blueprint
 3. Configure `INSTANCE_PATH = /mnt/instance` in your Render Environment Variables.
 
 ### Deploy on Vercel
-Configured via [`vercel.json`](vercel.json) using [`wsgi.py`](wsgi.py) as a serverless function handler. In serverless environments with read-only filesystems, storage automatically falls back to `/tmp`.
+Configured via [`vercel.json`](vercel.json) using [`wsgi.py`](wsgi.py) as a serverless function handler.
+
+Vercel functions have a read-only filesystem and no shared disk, so a SQLite file cannot hold your data there (anything in `/tmp` disappears and differs between instances). Use a hosted PostgreSQL database instead:
+
+1. In the Vercel dashboard open your project → **Storage** → **Create Database** → **Neon (Postgres)** and connect it to the project. This adds `DATABASE_URL` / `POSTGRES_URL` automatically. (Any PostgreSQL URL works, e.g. Supabase — set it as `DATABASE_URL`.)
+2. Under **Settings → Environment Variables** add `SECRET_KEY` (a long random string) so logins survive across serverless instances, and optionally `ADMIN_DEFAULT_PASSWORD`.
+3. For profile photos and Constellation file sharing, add `CLOUDINARY_URL` (free at cloudinary.com); without it, uploads return a clear error on Vercel.
+4. Redeploy. Tables are created and the book/game catalog is seeded automatically on the first request.
 
 ---
 

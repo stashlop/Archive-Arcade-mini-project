@@ -1,6 +1,7 @@
 import os
 import json
 import sqlite3
+import dbconn
 from datetime import datetime
 from flask import Blueprint, request, jsonify, session, current_app
 
@@ -40,7 +41,7 @@ def _fetch_item_details(item_type, item_id, action):
     # Returns title and unit_price for given item from unified database
     dbp = _unified_db_path()
     if item_type == 'book':
-        conn = sqlite3.connect(dbp)
+        conn = dbconn.connect(dbp)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute("SELECT id, title, buy_price, rent_price FROM books WHERE id = ?", (item_id,))
@@ -51,7 +52,7 @@ def _fetch_item_details(item_type, item_id, action):
         unit_price = row['buy_price'] if action == 'buy' else row['rent_price']
         return {'title': row['title'], 'unit_price': _to_inr(unit_price)}
     elif item_type == 'game':
-        conn = sqlite3.connect(dbp)
+        conn = dbconn.connect(dbp)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute("SELECT id, title, buy_price, rent_price FROM games WHERE id = ?", (item_id,))
@@ -206,7 +207,7 @@ def checkout():
     # Persist purchase history into unified arcade.db
     try:
         dbp = _games_db_path()
-        conn = sqlite3.connect(dbp)
+        conn = dbconn.connect(dbp)
         conn.row_factory = sqlite3.Row
         _ensure_purchase_history_table(conn)
         cur = conn.cursor()

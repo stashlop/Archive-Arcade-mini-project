@@ -1,4 +1,5 @@
 import sqlite3, os, json
+import dbconn
 from flask import Blueprint, current_app, jsonify, request, session
 from pathlib import Path
 from datetime import datetime
@@ -75,7 +76,7 @@ def row_to_game(r):
 @games_bp.route('/api/games', methods=['GET'])
 def list_games():
     dbp = get_db_path()
-    conn = sqlite3.connect(dbp)
+    conn = dbconn.connect(dbp)
     conn.row_factory = sqlite3.Row
     init_db(conn)
     cur = conn.cursor()
@@ -100,7 +101,7 @@ def seed_games():
         ("God of War (2018)", "A mythic reimagining: father, son, and monsters.", "Action,Adventure", 29.99, 6.99, "images/games/god.jpeg")
     ]
     dbp = get_db_path()
-    conn = sqlite3.connect(dbp)
+    conn = dbconn.connect(dbp)
     conn.row_factory = sqlite3.Row
     init_db(conn)
     cur = conn.cursor()
@@ -129,7 +130,7 @@ def save_purchase():
         items_json = json.dumps(data.get('items', []))
         
         dbp = get_db_path()
-        conn = sqlite3.connect(dbp)
+        conn = dbconn.connect(dbp)
         conn.row_factory = sqlite3.Row
         
         # Ensure both tables exist
@@ -161,7 +162,7 @@ def get_purchase_history():
     try:
         user_id = session.get('user_id')
         dbp = get_db_path()
-        conn = sqlite3.connect(dbp)
+        conn = dbconn.connect(dbp)
         conn.row_factory = sqlite3.Row
         
         # Ensure both tables exist

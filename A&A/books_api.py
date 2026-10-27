@@ -1,5 +1,6 @@
 import os
 import sqlite3
+import dbconn
 from flask import Blueprint, request, jsonify, current_app, session
 
 books_bp = Blueprint('books_api', __name__, url_prefix='/api')
@@ -15,7 +16,7 @@ def init_books_db():
     """Initialize books database with sample data"""
     try:
         dbp = get_db_path()
-        conn = sqlite3.connect(dbp)
+        conn = dbconn.connect(dbp)
         cur = conn.cursor()
         
         # Create books table
@@ -85,7 +86,7 @@ def get_books():
     """Get all books with optional filtering"""
     try:
         dbp = get_db_path()
-        conn = sqlite3.connect(dbp)
+        conn = dbconn.connect(dbp)
         conn.row_factory = sqlite3.Row
         
         # Get filter parameters
@@ -124,7 +125,7 @@ def get_book(book_id):
     """Get a specific book by ID"""
     try:
         dbp = get_db_path()
-        conn = sqlite3.connect(dbp)
+        conn = dbconn.connect(dbp)
         conn.row_factory = sqlite3.Row
         
         cur = conn.cursor()
@@ -153,7 +154,7 @@ def purchase_book():
     
     try:
         dbp = get_db_path()
-        conn = sqlite3.connect(dbp)
+        conn = dbconn.connect(dbp)
         conn.row_factory = sqlite3.Row
         
         cur = conn.cursor()
@@ -187,7 +188,7 @@ def rent_book():
     
     try:
         dbp = get_db_path()
-        conn = sqlite3.connect(dbp)
+        conn = dbconn.connect(dbp)
         conn.row_factory = sqlite3.Row
         
         cur = conn.cursor()

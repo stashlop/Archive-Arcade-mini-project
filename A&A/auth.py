@@ -1,5 +1,6 @@
 from flask import Blueprint, current_app, render_template, request, redirect, url_for, flash, session, jsonify
 import sqlite3, os
+import dbconn
 from pathlib import Path
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
@@ -14,7 +15,7 @@ def get_db_path():
 
 def get_conn():
     dbp = get_db_path()
-    conn = sqlite3.connect(dbp)
+    conn = dbconn.connect(dbp)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -143,4 +144,9 @@ def login_required(view):
 
 @auth_bp.route('/user-status')
 def user_status():
-    return render_template('user_status.html')
+    # There is no user_status.html template; report the login state as JSON
+    return jsonify({
+        'logged_in': is_authenticated(),
+        'user_id': current_user_id(),
+        'username': current_username(),
+    })
