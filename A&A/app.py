@@ -21,7 +21,10 @@ except ImportError:
 
 try:
     from dotenv import load_dotenv
-    load_dotenv()
+    # `neon env pull` writes .env.local; values there win over .env
+    _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    load_dotenv(os.path.join(_root, '.env.local'))
+    load_dotenv(os.path.join(_root, '.env'))
 except ImportError:
     pass
 
@@ -521,14 +524,14 @@ def create_app(config=None):
             return
         if dbconn.is_postgres():
             # Several serverless instances can cold-start at once; let only one
-            # create tables and seed the catalog at a time.
+            # create tables and seed the catalog at a time. A transaction-scoped
+            # lock also works through Neon's pooled (PgBouncer) connection string.
             with db.engine.connect() as lock_conn:
-                lock_conn.exec_driver_sql('SELECT pg_advisory_lock(727275)')
+                lock_conn.exec_driver_sql('SELECT pg_advisory_xact_lock(727275)')
                 try:
                     _initialize_database()
                 finally:
-                    lock_conn.exec_driver_sql('SELECT pg_advisory_unlock(727275)')
-                    lock_conn.commit()
+                    lock_conn.rollback()  # ends the transaction, releasing the lock
         else:
             _initialize_database()
         app.db_initialized = True

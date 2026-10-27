@@ -6,3 +6,6 @@ __pycache__/
 instance/
 arcade_*
 
+.neon
+node_modules/
+.env.local

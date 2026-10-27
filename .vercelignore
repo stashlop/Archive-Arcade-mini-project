@@ -8,3 +8,8 @@ NETWORK_TEST.md
 render.yaml
 run_local.py
 .vscode/
+neon.ts
+package.json
+package-lock.json
+node_modules/
+.env.local
