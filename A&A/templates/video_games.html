@@ -11,7 +11,7 @@
   <style>
     .page-header { text-align: left; }
     .game-description { font-size: 0.95rem; color: var(--muted); margin-bottom: 1rem; }
-    .game-prices { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+    .game-prices { display: flex; flex-wrap: wrap; gap: .3rem .8rem; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
     .price { font-weight: 700; }
     .buy-price { color: #7df9c2; }
     .rent-price { color: #7dd3fc; }
@@ -20,7 +20,7 @@
 <body>
   {% include 'partials/header.html' %}
 
-  <main class="page-shell">
+  <main class="page-shell" id="main">
     <header class="page-header">
       <p class="badge">Arcade Stack</p>
       <h1 class="page-title">Video Games</h1>
@@ -43,7 +43,7 @@
           </div>
           <div class="filter-group">
             <label for="search">Search</label>
-            <input type="text" name="search" id="search" placeholder="Search by title or description" value="{{ request.args.get('search') or '' }}" />
+            <input type="search" name="search" id="search" placeholder="Search by title or description" value="{{ request.args.get('search') or '' }}" />
           </div>
         </div>
         <button type="submit" class="btn btn-primary filter-btn">Apply Filters</button>
@@ -56,7 +56,7 @@
           <article class="game-card">
             <div class="game-image">
               {% if g.image or g.image_static %}
-                <img src="{{ url_for('static', filename=(g.image_static or g.image)) }}" alt="{{ g.title }}" />
+                <img src="{{ url_for('static', filename=(g.image_static or g.image)) }}" alt="Cover of {{ g.title }}" loading="lazy" decoding="async" />
               {% else %}
                 GAME
               {% endif %}
@@ -89,29 +89,33 @@
     {% endif %}
   </main>
 
+  <div id="cart-status" class="visually-hidden" role="status" aria-live="polite"></div>
   <script>
-    function addToCart(itemId, itemType, action) {
-      fetch('/api/cart/add', {
-        method: 'POST',
-        headers: { 'Content-Type':'application/json' },
-        body: JSON.stringify({ itemId, itemType, action, quantity: 1 })
-      })
-      .then(r => r.json())
-      .then(d => {
-        if (d.success) {
-          document.querySelectorAll('[data-cart-count]').forEach(n => n.textContent = d.count);
-        } else {
-          alert(d.error || 'Failed to add to cart');
-        }
-      })
-      .catch(() => alert('Error adding to cart'));
-    }
-
-    function addToCartEl(el){
+    async function addToCartEl(el){
       const id = Number(el.getAttribute('data-id'));
       const type = el.getAttribute('data-type');
       const action = el.getAttribute('data-action');
-      addToCart(id, type, action);
+      const label = el.textContent;
+      const live = document.getElementById('cart-status');
+      el.disabled = true;
+      el.textContent = 'Adding...';
+      try {
+        const res = await fetch('/api/cart/add', {
+          method: 'POST',
+          headers: { 'Content-Type':'application/json' },
+          body: JSON.stringify({ itemId: id, itemType: type, action, quantity: 1 })
+        });
+        const d = await readJson(res);
+        document.querySelectorAll('[data-cart-count]').forEach(n => n.textContent = d.count);
+        el.textContent = 'Added \u2713';
+        live.textContent = 'Added to cart. Cart now has ' + d.count + ' item' + (d.count === 1 ? '' : 's') + '.';
+      } catch (e) {
+        el.textContent = 'Try again';
+        live.textContent = e.message;
+        alert(e.message || 'Could not add to cart.');
+      } finally {
+        setTimeout(() => { el.textContent = label; el.disabled = false; }, 1200);
+      }
     }
   </script>
 </body>

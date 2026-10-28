@@ -1,6 +1,7 @@
 import sqlite3, os, json
 import dbconn
 from flask import Blueprint, current_app, jsonify, request, session
+from auth import is_admin
 from pathlib import Path
 from datetime import datetime
 
@@ -90,6 +91,8 @@ def seed_games():
     """
     Seed some sample games into the DB. Call once (POST) from CLI or browser for setup.
     """
+    if not is_admin():
+        return jsonify({"error": "Admins only"}), 403
     sample = [
         ("Baldur's Gate 3", "Epic CRPG adventure with deep choices and co-op.", "RPG,Co-op", 59.99, 9.99, "images/games/Baldurs_Gate_3.jpeg"),
         ("Alan Wake 2", "Psychological horror thriller with cinematic storytelling.", "Horror,Narrative", 49.99, 7.99, "images/games/Alan_Wake_2.jpeg"),
@@ -112,9 +115,15 @@ def seed_games():
 
 @games_bp.route('/api/purchase', methods=['POST'])
 def save_purchase():
-    """Save a purchase to the database"""
+    """Record a purchase directly (manual order entry for admins).
+
+    Shoppers check out through /api/cart/checkout, which prices the cart on the
+    server. This endpoint trusts the posted total, so it is limited to admins.
+    """
     if not session.get('user_id'):
         return jsonify({"error": "Authentication required"}), 401
+    if not is_admin():
+        return jsonify({"error": "Admins only"}), 403
     
     try:
         data = request.json
@@ -150,8 +159,8 @@ def save_purchase():
         return jsonify({"success": True, "purchase_id": purchase_id}), 201
         
     except Exception as e:
-        current_app.logger.error(f"Purchase error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.exception("Purchase error")
+        return jsonify({"error": "Failed to record purchase"}), 500
 
 @games_bp.route('/api/purchase/history', methods=['GET'])
 def get_purchase_history():
@@ -197,5 +206,5 @@ def get_purchase_history():
         return jsonify(history)
         
     except Exception as e:
-        current_app.logger.error(f"Get history error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.exception("Get history error")
+        return jsonify({"error": "Failed to load purchase history"}), 500

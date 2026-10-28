@@ -137,8 +137,11 @@ python -m venv .venv
 ### 3. Install Dependencies
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.txt        # runtime only
+pip install -r requirements-dev.txt    # adds pytest for running the test suite
 ```
+
+Run the tests with `python -m pytest -q`.
 
 ### 4. Run the Application
 
@@ -165,7 +168,7 @@ The application will be accessible at [http://127.0.0.1:5000](http://127.0.0.1:5
 
 - **Admin Account**:
   - **Username**: `admin`
-  - **Password**: `admin123`
+  - **Password**: the value of `ADMIN_DEFAULT_PASSWORD` when the account is first created. In local development (`python run_local.py`, `FLASK_ENV=development`) it falls back to `admin123`; in production an unset `ADMIN_DEFAULT_PASSWORD` gives the account an unguessable random password instead of a known default.
   - *Provides access to `/admin` and community administrative broadcasts.*
 - **Custom Admins**: Set the `ADMIN_USERS` environment variable as a comma-separated list of usernames to grant admin privileges.
 
@@ -177,8 +180,8 @@ Create a `.env` file in the project root (see `.env.example`):
 
 | Variable | Default | Description |
 | :--- | :--- | :--- |
-| `SECRET_KEY` | `dev-secret-key-change-me` | Secret key for cryptographic session signing. Set securely in production! |
-| `ADMIN_DEFAULT_PASSWORD` | `admin123` | Default password used when seeding the initial `admin` user. |
+| `SECRET_KEY` | *(required in production)* | Signs sessions and CSRF tokens; must be the same for every worker. If unset, the app derives one from `DATABASE_URL` or stores one in the instance folder, and logs a warning. |
+| `ADMIN_DEFAULT_PASSWORD` | `admin123` in dev, random in prod | Password used when seeding the initial `admin` user. |
 | `ADMIN_USERS` | `admin` | Comma-separated list of usernames granted admin status. |
 | `CAFE_OPEN` | `10:00` | Cafe opening time (HH:MM). |
 | `CAFE_CLOSE` | `22:00` | Cafe closing time (HH:MM). |
@@ -192,6 +195,9 @@ Create a `.env` file in the project root (see `.env.example`):
 | `CLOUDINARY_API_KEY` | *(optional)* | Cloudinary API Key. |
 | `CLOUDINARY_API_SECRET` | *(optional)* | Cloudinary API Secret. |
 | `MONGODB_URI` | *(optional)* | Optional MongoDB connection string for hybrid database sync. |
+| `OPENAI_API_KEY` | *(optional)* | Enables AI-suggested idea graphs in Constellation (OpenAI or OpenRouter key). |
+| `CORS_ORIGINS` | `*` | Comma-separated origins allowed to call `/api/*` cross-origin. |
+| `ENABLE_NETWORK_DIAGNOSTICS` | *(off in production)* | Set to `1` to expose host/IP details at `/api/network-status` outside dev mode. |
 
 ---
 
@@ -205,7 +211,19 @@ This repository includes a pre-configured [`render.yaml`](render.yaml) blueprint
 3. When prompted, fill in `DATABASE_URL` (the Postgres URL), `ADMIN_DEFAULT_PASSWORD` (password for the seeded `admin` user) and, for uploads, `CLOUDINARY_URL`. `SECRET_KEY` is generated for you.
 4. Deploy. Tables are created and the catalog is seeded on first start.
 
-Manual Web Service settings (if you don't use the blueprint): runtime **Python 3**, build command `pip install -r requirements.txt`, start command `gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120`, health check path `/`, plus the environment variables above and `PYTHON_VERSION=3.12.7`.
+Manual Web Service settings (if you don't use the blueprint):
+
+| Setting | Value |
+| :--- | :--- |
+| Service type | **Web Service** (one service serves pages, API and static files) |
+| Runtime | Python 3 (set env `PYTHON_VERSION=3.12.7`) |
+| Build command | `pip install -r requirements.txt` |
+| Start command | `gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers ${WEB_CONCURRENCY:-2} --threads 4 --timeout 120 --access-logfile -` |
+| Health check path | `/healthz` |
+| Required env vars | `SECRET_KEY`, `DATABASE_URL`, `ADMIN_DEFAULT_PASSWORD` |
+| Optional env vars | `CLOUDINARY_URL`, `ADMIN_USERS`, `OPENAI_API_KEY`, cafe settings (see table above) |
+
+Services still configured with the old start command `python "A&A/app.py"` hand off to gunicorn automatically when running on Render, but updating the start command is recommended.
 
 ### Deploy on Vercel
 Configured via [`vercel.json`](vercel.json) using [`wsgi.py`](wsgi.py) as a serverless function handler.

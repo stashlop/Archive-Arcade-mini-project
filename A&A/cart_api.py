@@ -119,13 +119,16 @@ def add_to_cart():
     if not _is_logged_in():
         return jsonify({'error': 'Not logged in'}), 401
 
-    data = request.get_json(force=True)
+    data = request.get_json(silent=True) or {}
     item_type = data.get('itemType')  # 'book' or 'game'
-    item_id = data.get('itemId')
     action = data.get('action', 'buy')  # 'buy' or 'rent'
-    quantity = int(data.get('quantity', 1))
+    try:
+        item_id = int(data.get('itemId'))
+        quantity = int(data.get('quantity', 1))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Invalid payload'}), 400
 
-    if item_type not in ('book', 'game') or not item_id or action not in ('buy', 'rent') or quantity < 1:
+    if item_type not in ('book', 'game') or item_id < 1 or action not in ('buy', 'rent') or not 1 <= quantity <= 99:
         return jsonify({'error': 'Invalid payload'}), 400
 
     details = _fetch_item_details(item_type, item_id, action)
@@ -161,7 +164,7 @@ def remove_from_cart():
     if not _is_logged_in():
         return jsonify({'error': 'Not logged in'}), 401
 
-    data = request.get_json(force=True)
+    data = request.get_json(silent=True) or {}
     key = data.get('key')
     if not key:
         return jsonify({'error': 'key required'}), 400
@@ -192,14 +195,12 @@ def checkout():
         return jsonify({'error': 'Cart is empty'}), 400
 
     # Demo payment flow: accept optional buyer/payment info and always succeed
-    payload = {}
-    try:
-        payload = request.get_json(force=True) or {}
-    except Exception:
-        payload = {}
+    payload = request.get_json(silent=True) or {}
 
     buyer = payload.get('buyer', {}) if isinstance(payload.get('buyer'), dict) else {}
-    payment_method = (payload.get('paymentMethod') or 'Demo').strip()
+    payment_method = str(payload.get('paymentMethod') or 'Demo').strip()[:40]
+    buyer_name = str(buyer.get('name') or '').strip()[:255]
+    buyer_email = str(buyer.get('email') or '').strip()[:255]
 
     items = cart['items']
     subtotal, _ = _totals(items)
@@ -220,8 +221,8 @@ def checkout():
                 int(session.get('user_id') or 0),
                 datetime.utcnow().isoformat(),
                 float(subtotal),
-                buyer.get('name', ''),
-                buyer.get('email', ''),
+                buyer_name,
+                buyer_email,
                 payment_method,
                 json.dumps(items),
                 'Processing'
@@ -230,8 +231,8 @@ def checkout():
         conn.commit()
         purchase_id = cur.lastrowid
         conn.close()
-    except Exception as e:
-        current_app.logger.exception(f"Failed to save purchase history: {e}")
+    except Exception:
+        current_app.logger.exception("Failed to save purchase history")
         return jsonify({'error': 'Failed to record purchase'}), 500
 
     # Clear the cart after successful demo checkout

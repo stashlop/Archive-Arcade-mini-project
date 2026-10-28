@@ -11,13 +11,20 @@
   <style>
     .member-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; }
     .member-card { background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 14px; padding: 0.7rem; }
+    .meta { display:flex; flex-wrap:wrap; gap:.4rem; align-items:center; margin-bottom:.4rem; }
     .meta .pill { font-size: 0.75rem; }
+    .member-card { min-width: 0; }
+    .member-name { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .member-avatar { flex:0 0 40px; width:40px; height:40px; border-radius:50%; object-fit:cover; background:rgba(255,255,255,.15); display:flex; align-items:center; justify-content:center; font-weight:700; }
+    .profile-form { display:grid; gap:.6rem; }
+    .profile-form input { width:100%; }
+    .feed-empty { color: var(--muted); }
   </style>
 </head>
 <body>
   {% include 'partials/header.html' %}
 
-  <main class="page-shell">
+  <main class="page-shell" id="main">
     <header class="page-header">
       <p class="badge">Community</p>
       <h1 class="page-title">Updates & Profiles</h1>
@@ -38,8 +45,10 @@
           {% if is_admin %}
           <h3>Post an Update</h3>
           <div class="post-box">
-            <textarea id="msg" placeholder="Share an update for everyone..."></textarea>
-            <button id="post-btn" class="btn btn-primary" style="margin-top:.6rem;">Post</button>
+            <label for="msg" class="visually-hidden">Update message</label>
+            <textarea id="msg" placeholder="Share an update for everyone..." maxlength="2000"></textarea>
+            <button id="post-btn" type="button" class="btn btn-primary" style="margin-top:.6rem;">Post</button>
+            <div id="post-msg" class="status-msg" role="status" aria-live="polite"></div>
           </div>
           <p class="page-subtitle">Only admins can post updates. Everyone can view them.</p>
           {% else %}
@@ -58,22 +67,24 @@
               <div class="page-subtitle">{{ session.get('community_email') }}</div>
             </div>
           </div>
-          <form id="profile-form" enctype="multipart/form-data">
-            <label>Display Name</label>
-            <input name="display_name" id="display_name" type="text" placeholder="Your name" />
-            <label style="margin-top:.5rem; display:block;">Photo</label>
+          <form id="profile-form" class="profile-form" enctype="multipart/form-data">
+            <label for="display_name">Display Name</label>
+            <input name="display_name" id="display_name" type="text" placeholder="Your name" maxlength="120" />
+            <label for="photo">Photo</label>
             <input name="photo" id="photo" type="file" accept="image/png,image/jpeg,image/webp" />
-            <button type="submit" class="btn btn-accent" style="margin-top:.5rem;">Save</button>
+            <div><button type="submit" class="btn btn-accent">Save</button></div>
           </form>
-          <div id="profile-hint" style="display:none; color:#9fd; margin-top:.5rem;">Saved!</div>
+          <div id="profile-hint" class="status-msg" role="status" aria-live="polite"></div>
           {% if session.get('user') %}
           <hr style="margin:1rem 0; border-color: rgba(255,255,255,.15);" />
           <h4>Account Username</h4>
-          <form id="username-form">
-            <input id="new_username" type="text" placeholder="New username" value="{{ session.get('user') }}" />
-            <button type="submit" class="btn btn-primary" style="margin-top:.5rem;">Change Username</button>
+          <form id="username-form" class="profile-form">
+            <label for="new_username" class="visually-hidden">New username</label>
+            <input id="new_username" type="text" placeholder="New username" value="{{ session.get('user') }}"
+                   minlength="3" maxlength="32" autocomplete="username" />
+            <div><button type="submit" class="btn btn-primary">Change Username</button></div>
           </form>
-          <div id="username-hint" style="display:none; color:#9fd; margin-top:.5rem;">Username updated!</div>
+          <div id="username-hint" class="status-msg" role="status" aria-live="polite"></div>
           {% endif %}
           {% else %}
           <p class="page-subtitle">Join from Home with your email to set a display name and photo.</p>
@@ -89,38 +100,43 @@
   </main>
 
   <script>
+    function setHint(id, text, kind){
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = text;
+      el.className = 'status-msg' + (kind ? ' is-' + kind : '');
+    }
+
     async function fetchMessages(){
+      const feed = document.getElementById('feed');
       try{
-        const r = await fetch('/api/community/messages');
-        const data = await r.json();
-        const feed = document.getElementById('feed');
+        const data = await readJson(await fetch('/api/community/messages'));
         feed.innerHTML = '';
+        if (!data.length) {
+          feed.innerHTML = '<p class="feed-empty">No updates yet. Check back soon.</p>';
+          return;
+        }
         data.forEach(m => {
           const wrap = document.createElement('div');
           wrap.className = 'msg';
           wrap.innerHTML = `
             <div class="meta">
               <span class="pill">${m.is_admin ? 'Admin' : 'User'}</span>
-              <strong>${m.author || (m.is_admin ? 'Admin' : 'User')}</strong>
+              <strong>${escapeHtml(m.author || (m.is_admin ? 'Admin' : 'User'))}</strong>
               <span>-</span>
-              <span>${(m.created_at || '').replace('T',' ').slice(0,19)}</span>
+              <span>${escapeHtml((m.created_at || '').replace('T',' ').slice(0,19))}</span>
             </div>
             <div class="content">${escapeHtml(m.content || '')}</div>
           `;
           feed.appendChild(wrap);
         });
       }catch(e){
-        console.error(e);
+        feed.innerHTML = '';
+        const p = document.createElement('p');
+        p.className = 'status-msg is-error';
+        p.textContent = 'Could not load updates. ' + (e.message || '');
+        feed.appendChild(p);
       }
-    }
-
-    function escapeHtml(s){
-      return (s||'')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
     }
 
     document.getElementById('refresh-btn').addEventListener('click', fetchMessages);
@@ -130,13 +146,20 @@
       postBtn.addEventListener('click', async () => {
         const ta = document.getElementById('msg');
         const content = (ta.value || '').trim();
-        if (!content) { alert('Write something first.'); return; }
-        const r = await fetch('/api/community/messages', {
-          method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ content })
-        });
-        const d = await r.json();
-        if (d && d.success) { ta.value = ''; fetchMessages(); }
-        else { alert(d.error || 'Failed to post'); }
+        if (!content) { setHint('post-msg', 'Write something first.', 'error'); return; }
+        postBtn.disabled = true;
+        try {
+          await readJson(await fetch('/api/community/messages', {
+            method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ content })
+          }));
+          ta.value = '';
+          setHint('post-msg', 'Posted.', 'success');
+          fetchMessages();
+        } catch (e) {
+          setHint('post-msg', e.message || 'Failed to post', 'error');
+        } finally {
+          postBtn.disabled = false;
+        }
       });
     }
 
@@ -150,8 +173,8 @@
         const avatar = document.getElementById('me-avatar');
         const nameEl = document.getElementById('me-name');
         const dn = document.getElementById('display_name');
-        if (me.photo_url){ avatar.src = me.photo_url; avatar.style.display = 'block'; }
-        if (me.display_name){ nameEl.textContent = me.display_name; if (dn) dn.value = me.display_name; }
+        if (me.photo_url && avatar){ avatar.src = me.photo_url; avatar.style.display = 'block'; }
+        if (me.display_name && nameEl){ nameEl.textContent = me.display_name; if (dn) dn.value = me.display_name; }
       }catch(e){ }
     }
     loadMe();
@@ -161,34 +184,37 @@
       profileForm.addEventListener('submit', async (ev) => {
         ev.preventDefault();
         const fd = new FormData(profileForm);
+        const btn = profileForm.querySelector('button[type=submit]');
+        btn.disabled = true;
+        setHint('profile-hint', 'Saving...');
         try{
-          const r = await fetch('/community/profile', { method:'POST', body: fd });
-          const d = await r.json();
-          if (d && d.success){
-            document.getElementById('profile-hint').style.display = 'block';
-            setTimeout(()=>{ document.getElementById('profile-hint').style.display='none'; loadMe(); loadMembers(); }, 800);
-          } else {
-            alert(d.error || 'Failed to save');
-          }
-        }catch(e){ alert('Failed to save'); }
+          await readJson(await fetch('/community/profile', { method:'POST', body: fd }));
+          setHint('profile-hint', 'Saved!', 'success');
+          loadMe(); loadMembers();
+        }catch(e){
+          setHint('profile-hint', e.message || 'Failed to save', 'error');
+        } finally {
+          btn.disabled = false;
+        }
       });
     }
 
     async function loadMembers(){
       try{
         const r = await fetch('/api/community/subscribers');
-        const data = await r.json();
+        const data = await readJson(r);
         const wrap = document.getElementById('members');
         if (!wrap) return;
         wrap.innerHTML = '';
+        if (!data.length) { wrap.innerHTML = '<p class="feed-empty">No members yet.</p>'; return; }
         data.forEach(s => {
           const card = document.createElement('div');
           card.className = 'member-card';
           card.innerHTML = `
             <div style="display:flex; gap:.6rem; align-items:center;">
-              ${s.photo_url ? `<img src="${s.photo_url}" alt="avatar" style="width:40px;height:40px;border-radius:50%;object-fit:cover;"/>` : `<div style=\"width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-weight:700;\">${(s.display_name||s.email||'?').toString().charAt(0).toUpperCase()}</div>`}
-              <div>
-                <div style="font-weight:600;">${escapeHtml(s.display_name || s.email)}</div>
+              ${s.photo_url ? `<img class="member-avatar" src="${escapeHtml(s.photo_url)}" alt="" loading="lazy"/>` : `<div class="member-avatar" aria-hidden="true">${escapeHtml((s.display_name||s.email||'?').toString().charAt(0).toUpperCase())}</div>`}
+              <div style="min-width:0;">
+                <div class="member-name">${escapeHtml(s.display_name || s.email)}</div>
                 <div class="page-subtitle">${escapeHtml((s.joined_at || '').replace('T',' ').slice(0,19))}</div>
               </div>
             </div>`;
@@ -203,17 +229,11 @@
       usernameForm.addEventListener('submit', async (ev) => {
         ev.preventDefault();
         const val = (document.getElementById('new_username').value || '').trim();
-        if (!val) { alert('Enter a username'); return; }
+        if (!val) { setHint('username-hint', 'Enter a username', 'error'); return; }
         try{
-          const r = await fetch('/account/username', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username: val }) });
-          const d = await r.json();
-          if (d && d.success) {
-            document.getElementById('username-hint').style.display = 'block';
-            setTimeout(()=>{ document.getElementById('username-hint').style.display='none'; }, 1000);
-          } else {
-            alert(d.error || 'Failed to update username');
-          }
-        } catch(e) { alert('Failed to update username'); }
+          await readJson(await fetch('/account/username', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username: val }) }));
+          setHint('username-hint', 'Username updated!', 'success');
+        } catch(e) { setHint('username-hint', e.message || 'Failed to update username', 'error'); }
       });
     }
   </script>

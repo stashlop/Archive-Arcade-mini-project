@@ -1,28 +1,34 @@
+<script>document.documentElement.classList.add('js');</script>
+<a class="skip-link" href="#main">Skip to content</a>
+{% set ep = request.endpoint %}
 <header class="site-header">
-  <nav class="nav-inner">
+  <nav class="nav-inner" aria-label="Main">
     <a class="brand" href="{{ url_for('index') }}">
-      <span class="brand-mark">A</span>
+      <span class="brand-mark" aria-hidden="true">A</span>
       <span class="brand-name">Arcade</span>
     </a>
-    <ul class="nav-links">
-      <li><a href="{{ url_for('index') }}">Home</a></li>
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-links" aria-label="Open menu">
+      <span class="nav-toggle-bars" aria-hidden="true"></span>
+    </button>
+    <ul class="nav-links" id="nav-links">
+      <li><a href="{{ url_for('index') }}" {% if ep == 'index' %}aria-current="page"{% endif %}>Home</a></li>
       {% if session.get('user') or session.get('user_id') or session.get('community_email') or is_admin %}
-      <li><a href="{{ url_for('community_page') }}">Community</a></li>
+      <li><a href="{{ url_for('community_page') }}" {% if ep == 'community_page' %}aria-current="page"{% endif %}>Community</a></li>
       {% endif %}
-      <li><a href="{{ url_for('books') }}">Books</a></li>
-      <li><a href="{{ url_for('video_games') }}">Video Games</a></li>
-      <li><a href="{{ url_for('cafe') }}">Cafe</a></li>
+      <li><a href="{{ url_for('books') }}" {% if ep == 'books' %}aria-current="page"{% endif %}>Books</a></li>
+      <li><a href="{{ url_for('video_games') }}" {% if ep == 'video_games' %}aria-current="page"{% endif %}>Video Games</a></li>
+      <li><a href="{{ url_for('cafe') }}" {% if ep == 'cafe' %}aria-current="page"{% endif %}>Cafe</a></li>
       {% if session.get('user') %}
       <li class="nav-greet">Hi, {{ user_display_name or session.get('user') }}</li>
       {% endif %}
       {% if session.get('user') %}
-      <li><a href="{{ url_for('constellation_page') }}" class="nav-accent">Constellation</a></li>
-      <li><a href="{{ url_for('history_page') }}">History</a></li>
+      <li><a href="{{ url_for('constellation_page') }}" class="nav-accent" {% if ep in ('constellation_page', 'constellation_chat') %}aria-current="page"{% endif %}>Constellation</a></li>
+      <li><a href="{{ url_for('history_page') }}" {% if ep == 'history_page' %}aria-current="page"{% endif %}>History</a></li>
       {% endif %}
       {% if is_admin %}
-      <li><a href="{{ url_for('admin_dashboard') }}">Dashboard</a></li>
+      <li><a href="{{ url_for('admin_dashboard') }}" {% if ep == 'admin_dashboard' %}aria-current="page"{% endif %}>Dashboard</a></li>
       {% endif %}
-      <li><a href="{{ url_for('cart') }}">Cart (<span data-cart-count>{{ cart_count or 0 }}</span>)</a></li>
+      <li><a href="{{ url_for('cart') }}" {% if ep == 'cart' %}aria-current="page"{% endif %}>Cart (<span data-cart-count>{{ cart_count or 0 }}</span>)</a></li>
       {% if session.get('user') %}
       <li><a href="{{ url_for('logout') }}">Logout</a></li>
       {% else %}
@@ -32,6 +38,15 @@
     </ul>
   </nav>
 </header>
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div class="flash-stack" role="status">
+    {% for category, message in messages %}
+      <div class="flash-msg flash-{{ category }}">{{ message }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+{% endwith %}
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <script>
   (function() {
@@ -59,5 +74,41 @@
       }
       return origFetch.call(this, url, options);
     };
+
+    // Shared helpers for page scripts
+    window.escapeHtml = function(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    };
+    // Parse a JSON response, turning HTML error pages or network hiccups into an Error
+    window.readJson = async function(res) {
+      let data = null;
+      try { data = await res.json(); } catch (e) { data = null; }
+      if (!res.ok) {
+        const err = new Error((data && data.error) || (res.status === 401 ? 'Please sign in again.' : 'Request failed (' + res.status + ').'));
+        err.status = res.status; err.data = data;
+        throw err;
+      }
+      return data;
+    };
+
+    // Mobile menu
+    const header = document.querySelector('.site-header');
+    const toggle = header && header.querySelector('.nav-toggle');
+    if (toggle) {
+      const setOpen = open => {
+        header.classList.toggle('nav-open', open);
+        toggle.setAttribute('aria-expanded', String(open));
+        toggle.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+      };
+      toggle.addEventListener('click', () => setOpen(!header.classList.contains('nav-open')));
+      document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && header.classList.contains('nav-open')) { setOpen(false); toggle.focus(); }
+      });
+      document.addEventListener('click', e => {
+        if (header.classList.contains('nav-open') && !header.contains(e.target)) setOpen(false);
+      });
+    }
   })();
 </script>

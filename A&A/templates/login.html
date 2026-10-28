@@ -16,38 +16,45 @@
     .auth-card label { display:block; font-weight:700; color:var(--text); margin-bottom:.45rem; }
     .auth-card input:not([type="hidden"]) { width:100%; min-height:44px; }
     .auth-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 0.2rem; gap: 0.8rem; flex-wrap: wrap; }
-    .flash { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 0.7rem; margin: 0.8rem 0; color: var(--muted); }
+    .flash { display: grid; gap: .4rem; }
+    .auth-back { color: var(--muted); text-decoration: none; font-size: .9rem; }
+    .auth-back:hover { color: var(--text); }
   </style>
 </head>
 <body>
-  <div class="auth-wrap">
+  <main class="auth-wrap" id="main">
     <div class="auth-card">
+      <a class="auth-back" href="{{ url_for('index') }}">&larr; Back to Arcade</a>
       <p class="badge">Welcome Back</p>
       <h2>Sign in</h2>
 
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
-          <div class="flash">
+          <div class="flash" role="alert">
             {% for category, message in messages %}
-              <div>{{ message }}</div>
+              <div class="flash-msg flash-{{ category }}">{{ message }}</div>
             {% endfor %}
           </div>
         {% endif %}
       {% endwith %}
 
-      <form method="post" action="{{ url_for('login') }}">
+      <form method="post" action="{{ url_for('login') }}" onsubmit="this.querySelector('button[type=submit]').disabled = true">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-        <input type="hidden" name="next" value="{{ request.args.get('next','') }}">
-        <label for="ident">Username or Email</label>
-        <input id="ident" name="ident" required autocomplete="username">
+        <input type="hidden" name="next" value="{{ next_url or '' }}">
+        <div>
+          <label for="ident">Username or Email</label>
+          <input id="ident" name="ident" required autocomplete="username" value="{{ ident or '' }}" autofocus>
+        </div>
+        <div>
         <label for="password">Password</label>
         <input id="password" name="password" type="password" required autocomplete="current-password">
+        </div>
         <div class="auth-actions">
           <button type="submit" class="btn btn-primary">Sign in</button>
           <a href="{{ url_for('signup') }}" class="page-subtitle">Create account</a>
         </div>
       </form>
     </div>
-  </div>
+  </main>
 </body>
 </html>

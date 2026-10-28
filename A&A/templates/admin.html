@@ -12,7 +12,8 @@
     .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
     .stat-card { padding: 1rem; border-radius: 16px; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.12); }
     .stat-value { font-size: 1.8rem; font-weight: 700; }
-    .table-wrap { overflow: auto; }
+    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    table { min-width: 520px; }
     table { width: 100%; border-collapse: collapse; }
     th, td { padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); text-align: left; }
     th { color: var(--text); }
@@ -25,7 +26,7 @@
 <body>
   {% include 'partials/header.html' %}
 
-  <main class="page-shell">
+  <main class="page-shell" id="main">
     <header class="page-header">
       <p class="badge">Admin Console</p>
       <h1 class="page-title">Dashboard</h1>
@@ -129,7 +130,7 @@
               <td style="text-align:right;">INR {{ '%.2f'|format(p.total_amount|float) }}</td>
               <td>
                 {% set ds = (p.delivery_status or 'Processing') %}
-                <select class="delivery-select" data-pid="{{ p.id }}">
+                <select class="delivery-select" data-pid="{{ p.id }}" aria-label="Delivery status for order {{ p.id }}">
                   <option value="Processing" {{ 'selected' if ds=='Processing' else '' }}>Processing</option>
                   <option value="Out for delivery" {{ 'selected' if ds=='Out for delivery' else '' }}>Out for delivery</option>
                   <option value="Delivered" {{ 'selected' if ds=='Delivered' else '' }}>Delivered</option>
@@ -229,18 +230,24 @@
       });
 
       document.querySelectorAll('.delivery-select').forEach(sel => {
+        sel.dataset.prev = sel.value;
         sel.addEventListener('change', async () => {
           const pid = sel.getAttribute('data-pid');
+          sel.disabled = true;
           try {
-            const r = await fetch(`/admin/purchase/${pid}/delivery`, {
+            const r = await fetch(`/admin/purchase/${encodeURIComponent(pid)}/delivery`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
               body: JSON.stringify({ status: sel.value })
             });
-            const d = await r.json();
-            if (!r.ok) alert(d.error || 'Update failed');
+            await readJson(r);
+            sel.dataset.prev = sel.value;
           } catch (e) {
-            alert('Update failed');
+            // Don't leave the dropdown showing a status that was never saved
+            sel.value = sel.dataset.prev;
+            alert(e.message || 'Update failed');
+          } finally {
+            sel.disabled = false;
           }
         });
       });
