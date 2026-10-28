@@ -18,19 +18,63 @@
   box-sizing: border-box;
 }
 
-html, body {
-  height: 100%;
+html {
+  color-scheme: dark;
+  background-color: var(--bg-0);
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   margin: 0;
   font-family: "Space Grotesk", "DM Sans", "Segoe UI", sans-serif;
   color: var(--text);
+  /* body grows with its content, so the gradient covers the whole page instead of
+     repeating (and showing a seam) every viewport height */
   background: radial-gradient(1200px 600px at 10% -10%, rgba(29, 185, 255, 0.2), transparent 55%),
               radial-gradient(900px 500px at 90% 10%, rgba(245, 158, 11, 0.16), transparent 60%),
               linear-gradient(135deg, var(--bg-0), var(--bg-2));
+  background-repeat: no-repeat;
   min-height: 100vh;
-  overflow-x: hidden;
+  min-height: 100dvh;
+  overflow-wrap: break-word;
+}
+
+img, video, svg {
+  max-width: 100%;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -100px;
+  z-index: 200;
+  padding: 0.6rem 1rem;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #02131b;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  top: 0.75rem;
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 h1, h2, h3, h4 {
@@ -51,7 +95,12 @@ a {
 .page-shell {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 2.5rem 1.5rem 4rem;
+  padding: 2.5rem clamp(1rem, 4vw, 1.5rem) 4rem;
+}
+
+/* Consistent vertical rhythm between stacked sections */
+.page-shell > * + * {
+  margin-top: 1.5rem;
 }
 
 .section-card,
@@ -73,18 +122,15 @@ a {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 1rem;
   margin-bottom: 1.5rem;
 }
 
 .page-title {
-  font-size: 3.2rem;
+  font-size: clamp(2.2rem, 7vw, 3.2rem);
+  line-height: 1.05;
   margin-bottom: 0.6rem;
-}
-
-.page-subtitle {
-  color: var(--muted);
-  font-size: 0.95rem;
 }
 
 .page-header {
@@ -107,12 +153,28 @@ button {
   background: rgba(255, 255, 255, 0.06);
   color: var(--text);
   transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  text-decoration: none;
+  line-height: 1.2;
+  text-align: center;
 }
 
 .btn:hover,
 button:hover {
   transform: translateY(-1px);
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.25);
+}
+
+.btn:disabled,
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  transform: none;
+  box-shadow: none;
 }
 
 .btn-primary {
@@ -145,6 +207,84 @@ input, select, textarea {
   border-radius: 12px;
   color: var(--text);
   padding: 0.65rem 0.8rem;
+  max-width: 100%;
+  min-height: 44px;
+  font-size: 1rem; /* 16px stops iOS Safari from zooming into focused fields */
+}
+
+textarea {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+}
+
+input[type="file"] {
+  padding: 0.5rem;
+  min-width: 0;
+}
+
+label {
+  color: var(--text);
+}
+
+.field-stack {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.field-stack input,
+.field-stack select,
+.field-stack textarea {
+  width: 100%;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
+  gap: 0.9rem;
+  align-items: end;
+}
+
+.status-msg {
+  min-height: 1.4em;
+  margin-top: 0.8rem;
+  color: var(--muted);
+}
+
+.status-msg.is-error {
+  color: #fca5a5;
+}
+
+.status-msg.is-success {
+  color: #86efac;
+}
+
+.flash-stack {
+  max-width: 1200px;
+  margin: 1rem auto 0;
+  padding: 0 clamp(1rem, 4vw, 1.5rem);
+  display: grid;
+  gap: 0.5rem;
+}
+
+.flash-msg {
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  border: 1px solid rgba(29, 185, 255, 0.35);
+  background: rgba(29, 185, 255, 0.1);
+  color: var(--text);
+}
+
+.flash-msg.flash-error {
+  border-color: rgba(239, 68, 68, 0.45);
+  background: rgba(239, 68, 68, 0.12);
+  color: #fecaca;
+}
+
+.flash-msg.flash-success {
+  border-color: rgba(16, 185, 129, 0.45);
+  background: rgba(16, 185, 129, 0.12);
+  color: #bbf7d0;
 }
 
 .delivery-select {
@@ -173,18 +313,58 @@ input:focus, select:focus, textarea:focus {
 .nav-inner {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 0.9rem 1.5rem;
+  padding: 0.75rem clamp(1rem, 4vw, 1.5rem);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  position: relative;
 }
+
+.nav-toggle {
+  display: none;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.nav-toggle-bars,
+.nav-toggle-bars::before,
+.nav-toggle-bars::after {
+  display: block;
+  width: 20px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.nav-toggle-bars {
+  position: relative;
+}
+
+.nav-toggle-bars::before,
+.nav-toggle-bars::after {
+  content: "";
+  position: absolute;
+  left: 0;
+}
+
+.nav-toggle-bars::before { top: -6px; }
+.nav-toggle-bars::after { top: 6px; }
+
+.nav-toggle[aria-expanded="true"] .nav-toggle-bars { background: transparent; }
+.nav-toggle[aria-expanded="true"] .nav-toggle-bars::before { transform: translateY(6px) rotate(45deg); }
+.nav-toggle[aria-expanded="true"] .nav-toggle-bars::after { transform: translateY(-6px) rotate(-45deg); }
 
 .brand {
   display: flex;
   align-items: center;
   gap: 0.8rem;
   text-decoration: none;
+  flex-shrink: 0;
 }
 
 .brand-mark {
@@ -207,19 +387,30 @@ input:focus, select:focus, textarea:focus {
 .nav-links {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.7rem;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.15rem;
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
 .nav-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
   text-decoration: none;
-  padding: 0.45rem 0.8rem;
+  padding: 0.45rem 0.55rem;
   border-radius: 10px;
   border: 1px solid transparent;
   color: var(--text);
   font-weight: 600;
+  white-space: nowrap;
+}
+
+.nav-links a[aria-current="page"] {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .nav-links a:hover {
@@ -230,8 +421,12 @@ input:focus, select:focus, textarea:focus {
 .nav-greet {
   align-self: center;
   color: var(--muted);
-  font-size: 0.9rem;
-  padding: 0.35rem 0.6rem;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.4rem;
+  max-width: 14ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .nav-links .nav-accent {
@@ -244,6 +439,18 @@ input:focus, select:focus, textarea:focus {
   grid-template-columns: 1.2fr 0.8fr;
   gap: 2rem;
   align-items: start;
+}
+
+/* Grid/flex children default to min-width:auto and would grow to fit wide
+   content (file inputs, long words) instead of shrinking to the column */
+.page-hero > *,
+.layout > *,
+.right-col > *,
+.filter-row > *,
+.catalog-grid > *,
+.books-grid > *,
+.games-grid > * {
+  min-width: 0;
 }
 
 .hero-card {
@@ -280,7 +487,7 @@ input:focus, select:focus, textarea:focus {
 .books-grid,
 .games-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
   gap: 1.5rem;
 }
 
@@ -291,6 +498,8 @@ input:focus, select:focus, textarea:focus {
   border-radius: 18px;
   overflow: hidden;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+  display: flex;
+  flex-direction: column;
 }
 
 .book-card:hover,
@@ -301,24 +510,45 @@ input:focus, select:focus, textarea:focus {
 
 .book-image,
 .game-image {
-  height: 220px;
+  position: relative;
+  height: 240px;
+  overflow: hidden;
   background: rgba(255, 255, 255, 0.05);
   display: grid;
   place-items: center;
   font-size: 2.5rem;
+  flex-shrink: 0;
 }
 
+/* Pinned to the frame: a grid item's height:100% resolves against an auto row,
+   which let tall covers spill over the card text */
 .book-image img,
 .game-image img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center top;
   display: block;
 }
 
 .book-content,
 .game-content {
   padding: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.book-content > :last-child,
+.game-content > :last-child {
+  margin-top: auto;
+}
+
+.book-content > .pill,
+.game-content > .pill {
+  align-self: flex-start;
 }
 
 .book-title,
@@ -362,11 +592,26 @@ input:focus, select:focus, textarea:focus {
   gap: 1rem;
 }
 
+.filter-group {
+  display: grid;
+  gap: 0.4rem;
+}
+
 .filter-group label {
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--muted);
+}
+
+.filter-group input,
+.filter-group select {
+  width: 100%;
+}
+
+.filters form {
+  display: grid;
+  gap: 1rem;
 }
 
 .filter-btn {
@@ -449,17 +694,83 @@ input:focus, select:focus, textarea:focus {
   }
 }
 
-@media (max-width: 720px) {
-  .nav-inner {
+/* The logged-in nav has up to 11 entries; below this width it collapses into a
+   menu instead of wrapping into a header that fills a third of a phone screen */
+@media (max-width: 1180px) {
+  .js .nav-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .js .nav-links {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
+    gap: 0.25rem;
+    padding: 0.75rem clamp(1rem, 4vw, 1.5rem) 1rem;
+    background: rgba(7, 11, 16, 0.97);
+    border-bottom: 1px solid var(--line);
+    box-shadow: 0 24px 40px rgba(0, 0, 0, 0.45);
+    max-height: calc(100dvh - 70px);
+    overflow-y: auto;
   }
 
-  .nav-links {
-    gap: 0.4rem;
+  .js .site-header.nav-open .nav-links {
+    display: flex;
   }
 
-  .page-title {
-    font-size: 2.4rem;
+  /* A backdrop-filter on the header makes Chrome composite the dropdown panel
+     inside the blurred layer, so page text bled through it */
+  .js .site-header.nav-open {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: #070b10;
   }
+
+  .js .site-header.nav-open .nav-links {
+    background: #070b10;
+  }
+
+  .js .nav-links a {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .js .nav-greet {
+    align-self: flex-start;
+  }
+}
+
+@media (max-width: 720px) {
+  .book-actions,
+  .game-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .btn:hover,
+  button:hover,
+  .book-card:hover,
+  .game-card:hover {
+    transform: none;
+  }
+}
+
+p.badge {
+  display: inline-block;
 }

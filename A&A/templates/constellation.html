@@ -4,8 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Knowledge Constellation - Arcade</title>
-  <script src="https://d3js.org/d3.v7.min.js"></script>
-  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <script src="{{ url_for('static', filename='vendor/d3.v7.9.0.min.js') }}"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -25,101 +24,26 @@
     }
 
     * { box-sizing: border-box; }
-    html, body { min-height: 100%; }
     body {
       margin: 0;
       background: #060b14;
       color: var(--text);
       font-family: "Space Grotesk", "Segoe UI", sans-serif;
+      /* Desktop: header + app fill exactly one screen, whatever height the header wraps to */
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      height: 100dvh;
       overflow: hidden;
     }
-
-    .site-header {
-      position: sticky;
-      top: 0;
-      z-index: 30;
-      background: rgba(5, 9, 15, 0.88);
-      border-bottom: 1px solid var(--line);
-      backdrop-filter: blur(18px);
-    }
-
-    .nav-inner {
-      width: min(100%, 1500px);
-      margin: 0 auto;
-      padding: 0.7rem 1rem;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 1rem;
-    }
-
-    .brand {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.7rem;
-      color: var(--text);
-      text-decoration: none;
-      white-space: nowrap;
-    }
-
-    .brand-mark {
-      width: 38px;
-      height: 38px;
-      border-radius: 10px;
-      display: grid;
-      place-items: center;
-      background: linear-gradient(135deg, var(--accent), var(--accent-2));
-      color: #031019;
-      font-weight: 700;
-    }
-
-    .brand-name {
-      font-weight: 700;
-      letter-spacing: 0.04em;
-    }
-
-    .nav-links {
-      margin: 0;
-      padding: 0;
-      list-style: none;
-      display: flex;
-      align-items: center;
-      justify-content: flex-end;
-      gap: 0.35rem;
-      flex-wrap: wrap;
-    }
-
-    .nav-links a,
-    .nav-greet {
-      display: inline-flex;
-      align-items: center;
-      min-height: 36px;
-      padding: 0.45rem 0.65rem;
-      border-radius: 8px;
-      color: var(--text);
-      font-size: 0.92rem;
-      font-weight: 600;
-      text-decoration: none;
-    }
-
-    .nav-links a:hover {
-      background: rgba(255,255,255,0.08);
-      text-decoration: none;
-    }
-
-    .nav-links .nav-accent {
-      color: #bcecff;
-      background: rgba(29,185,255,0.14);
-      border: 1px solid rgba(29,185,255,0.32);
-    }
-
-    .nav-greet { color: var(--muted); }
+    .site-header { flex: 0 0 auto; }
+    .flash-stack { flex: 0 0 auto; margin-bottom: 1rem; }
 
     .page-body {
+      flex: 1 1 auto;
+      min-height: 0;
       display: grid;
-      grid-template-columns: minmax(230px, 280px) minmax(340px, 450px) minmax(460px, 1fr);
-      height: calc(100dvh - 62px);
-      min-height: 560px;
+      grid-template-columns: minmax(230px, 280px) minmax(340px, 450px) minmax(0, 1fr);
       border-top: 1px solid rgba(255,255,255,0.04);
     }
 
@@ -159,7 +83,7 @@
     .chat-name { font-weight:700; font-size:1rem; }
     .chat-sub { color: var(--muted); font-size: 0.8rem; }
     .mode-toggle { display:flex; gap:0.35rem; margin-top:0.7rem; }
-    .mode-btn { min-height:32px; padding:0.35rem 0.75rem; border-radius:8px; border:1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.05); color: var(--text); font-size:0.78rem; cursor:pointer; }
+    .mode-btn { min-height:36px; padding:0.35rem 0.75rem; border-radius:8px; border:1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.05); color: var(--text); font-size:0.78rem; cursor:pointer; }
     .mode-btn.active { background: rgba(29,185,255,0.25); border-color: rgba(29,185,255,0.5); }
 
     .messages { flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; padding:1rem; display:flex; flex-direction:column; gap:0.65rem; scroll-behavior:smooth; overscroll-behavior:contain; }
@@ -186,7 +110,7 @@
     .btn-ghost { border-color:rgba(255,255,255,.15); }
     button:disabled, textarea:disabled { cursor:not-allowed; opacity:.5; }
 
-    .graph-panel { min-width:0; position:relative; display:flex; flex-direction:column; background: radial-gradient(ellipse at 50% 40%, #0b1a2d 0%, #060b14 72%); }
+    .graph-panel { min-width:0; min-height:0; position:relative; display:flex; flex-direction:column; background: radial-gradient(ellipse at 50% 40%, #0b1a2d 0%, #060b14 72%); }
     .graph-header { min-height:82px; padding:1rem 1.25rem; border-bottom:1px solid rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:space-between; gap:1rem; }
     .graph-title { font-weight:700; font-size:1rem; color:#90b4ff; }
     .graph-sub { font-size:.75rem; color: var(--muted); }
@@ -203,27 +127,35 @@
 
     @keyframes fadeUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
 
+    /* Tablet: sidebar + chat side by side, graph moves below instead of disappearing */
     @media (max-width: 1100px) {
-      body { overflow:auto; }
-      .page-body { grid-template-columns: minmax(220px, 280px) 1fr; height:calc(100dvh - 62px); min-height:560px; }
-      .graph-panel { display:none; }
+      body { display:block; height:auto; overflow:visible; }
+      .page-body { grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); grid-template-rows: minmax(560px, calc(100dvh - 80px)) auto; }
+      .chat-panel { border-right:0; }
+      .graph-panel { grid-column: 1 / -1; height: 480px; border-top:1px solid var(--line); }
     }
     @media (max-width: 820px) {
-      .nav-inner { align-items:flex-start; flex-direction:column; }
-      .nav-links { justify-content:flex-start; }
-      .page-body { grid-template-columns: 1fr; height:auto; min-height:calc(100dvh - 62px); }
-      .sidebar { max-height:290px; border-right:0; border-bottom:1px solid var(--line); }
-      .chat-panel { height:calc(100dvh - 62px); min-height:560px; border-right:0; }
+      .page-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
+      .sidebar { max-height:320px; border-right:0; border-bottom:1px solid var(--line); }
+      .chat-panel { height:75dvh; min-height:480px; }
+      .graph-panel { height: 420px; }
+      .graph-header { min-height:0; flex-wrap:wrap; }
+      .chat-header { min-height:0; }
       .input-row { flex-wrap:wrap; }
       #msg-input { flex-basis:100%; }
+      .input-row .btn { flex:1; }
       .msg-bubble { max-width:92%; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .msg-bubble { animation:none; }
+      .messages { scroll-behavior:auto; }
     }
   </style>
 </head>
 <body>
   {% include 'partials/header.html' %}
 
-  <div class="page-body">
+  <div class="page-body" id="main">
     <aside class="sidebar">
       <div class="sidebar-header">
         <h2>Constellation</h2>
@@ -235,10 +167,11 @@
           <strong id="my-handle">loading...</strong>
         </div>
         <form class="friend-form" id="friend-form">
+          <label for="friend-handle" class="visually-hidden">Friend tag</label>
           <input id="friend-handle" placeholder="username#0000" autocomplete="off" />
           <button type="submit">Add</button>
         </form>
-        <div class="friend-status" id="friend-status"></div>
+        <div class="friend-status" id="friend-status" role="status" aria-live="polite"></div>
         <div class="request-list" id="request-list"></div>
       </div>
       <div class="user-list" id="user-list">
@@ -253,12 +186,12 @@
           <div class="chat-name" id="chat-name">Select a friend</div>
           <div class="chat-sub" id="chat-sub">to start chatting</div>
           <div class="mode-toggle">
-            <button class="mode-btn active" data-mode="chat" id="mode-chat">Chat</button>
-            <button class="mode-btn" data-mode="ideas" id="mode-ideas">Ideas</button>
+            <button type="button" class="mode-btn active" data-mode="chat" id="mode-chat" aria-pressed="true">Chat</button>
+            <button type="button" class="mode-btn" data-mode="ideas" id="mode-ideas" aria-pressed="false">Ideas</button>
           </div>
         </div>
       </div>
-      <div class="messages" id="messages">
+      <div class="messages" id="messages" aria-live="polite">
         <div class="placeholder-msg" id="chat-placeholder">
           <div class="placeholder-icon">?</div>
           <div style="font-size:1rem; font-weight:700; color:#dbe7ff;">Select a friend</div>
@@ -267,12 +200,13 @@
       </div>
       <div class="chat-input-area">
         <div class="input-row">
+          <label for="msg-input" class="visually-hidden">Message</label>
           <textarea id="msg-input" rows="1" placeholder="Type a message..." disabled></textarea>
           <label class="btn btn-ghost" title="Attach file" id="attach-label">
-            Attach
-            <input type="file" id="file-input" style="display:none" accept=".pdf,.png,.jpg,.jpeg,.txt,.doc,.docx,.xls,.xlsx,.webp" />
+            <span id="attach-text">Attach</span>
+            <input type="file" id="file-input" class="visually-hidden" accept=".pdf,.png,.jpg,.jpeg,.txt,.doc,.docx,.xls,.xlsx,.webp" />
           </label>
-          <button class="btn btn-primary" id="send-btn" disabled title="Send">Send</button>
+          <button type="button" class="btn btn-primary" id="send-btn" disabled title="Send">Send</button>
         </div>
       </div>
     </section>
@@ -284,8 +218,8 @@
           <div class="graph-sub" id="graph-sub">Send a message to grow the graph</div>
         </div>
         <div class="graph-actions">
-          <button class="reset-btn" id="delete-node-btn" style="display:none; background:#ef4444; border-color:#ef4444;">Delete</button>
-          <button class="reset-btn" id="center-graph-btn">Reset view</button>
+          <button type="button" class="reset-btn" id="delete-node-btn" style="display:none; background:#ef4444; border-color:#ef4444;">Delete</button>
+          <button type="button" class="reset-btn" id="center-graph-btn">Reset view</button>
         </div>
       </div>
       <div class="graph-canvas">
@@ -322,11 +256,14 @@ let selectedNode = null;
 let activeMode = 'chat';
 
 const NODE_COLOR = { topic: '#1db9ff', file: '#0ea5e9', person: '#10b981', idea: '#f59e0b' };
+const REDUCED_MOTION = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 function setMode(mode) {
   activeMode = mode;
   document.getElementById('mode-chat').classList.toggle('active', mode === 'chat');
   document.getElementById('mode-ideas').classList.toggle('active', mode === 'ideas');
+  document.getElementById('mode-chat').setAttribute('aria-pressed', String(mode === 'chat'));
+  document.getElementById('mode-ideas').setAttribute('aria-pressed', String(mode === 'ideas'));
   document.getElementById('attach-label').style.display = mode === 'chat' ? 'inline-flex' : 'none';
   document.getElementById('msg-input').placeholder = mode === 'ideas' ? 'Capture project ideas, tasks, or topics...' : 'Type a message...';
   document.getElementById('graph-title').textContent = mode === 'ideas' ? 'Project Map' : 'Knowledge Constellation';
@@ -451,8 +388,8 @@ async function loadUsers(){
       el.dataset.uid = u.id;
       const initials = (u.display_name || u.username || '?').charAt(0).toUpperCase();
       const photoHTML = u.photo_path
-        ? `<img src="${mediaUrl(u.photo_path)}" alt="avatar"/>`
-        : initials;
+        ? `<img src="${escHtml(mediaUrl(u.photo_path))}" alt=""/>`
+        : escHtml(initials);
       el.innerHTML = `<div class="c-avatar">${photoHTML}</div><div class="user-info"><div class="name">${escHtml(u.display_name || u.username)}</div><div class="sub">${escHtml(u.handle || ('@' + u.username))}</div></div>`;
       el.addEventListener('click', () => openChat(u));
       list.appendChild(el);
@@ -478,15 +415,20 @@ async function openChat(user){
   activeOtherUid = user.id;
   const initials = (user.display_name || user.username || '?').charAt(0).toUpperCase();
   document.getElementById('chat-avatar').innerHTML = user.photo_path
-    ? `<img src="${mediaUrl(user.photo_path)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>`
-    : initials;
+    ? `<img src="${escHtml(mediaUrl(user.photo_path))}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>`
+    : escHtml(initials);
   document.getElementById('chat-name').textContent = user.display_name || user.username;
   document.getElementById('chat-sub').textContent = '@' + user.username;
 
-  const res = await fetch(`/api/constellation/chat/${encodeURIComponent(user.id)}`);
-  const data = await res.json();
-  if(!res.ok || !data.chat_id){
-    setFriendStatus(data.error || 'Could not open chat.');
+  let data = {};
+  try {
+    data = await readJson(await fetch(`/api/constellation/chat/${encodeURIComponent(user.id)}`));
+  } catch (e) {
+    setFriendStatus(e.message || 'Could not open chat.');
+    return;
+  }
+  if(!data.chat_id){
+    setFriendStatus('Could not open chat.');
     return;
   }
   activeChatId = data.chat_id;
@@ -539,11 +481,11 @@ async function loadMessages(initial = false){
       bubble.dataset.msgId = m.id;
       if(m.file_url){
         const icon = m.file_type === 'pdf' ? '📄 PDF' : m.file_type === 'image' ? '🖼 IMG' : '📎 FILE';
-        bubble.innerHTML = `<a class="msg-file" href="${m.file_url}" target="_blank" rel="noopener">
+        bubble.innerHTML = `<a class="msg-file" href="${escHtml(m.file_url)}" target="_blank" rel="noopener">
           <span class="file-icon">${icon}</span>
           <div class="file-info">
             <div class="fn">${escHtml(m.file_name || 'File')}</div>
-            <div class="ft">${(m.file_type || '').toUpperCase()}</div>
+            <div class="ft">${escHtml((m.file_type || '').toUpperCase())}</div>
           </div>
         </a><div class="msg-time">${fmtTime(m.created_at)}</div>`;
       } else {
@@ -586,19 +528,21 @@ async function sendMessage(){
       body: JSON.stringify({chat_id: activeChatId, content})
     });
     const result = await r.json();
-    if(result.error){
-      console.error('Send error:', result.error);
-      bubble.style.opacity = '0.4';
+    if(!r.ok || result.error){
+      bubble.style.opacity = '0.6';
       bubble.style.textDecoration = 'line-through';
+      bubble.title = 'Not sent: ' + (result.error || 'server error');
+      setFriendStatus('Message not sent: ' + (result.error || 'server error'));
       return;
     }
     bubble.remove();
     await loadMessages();
     await refreshGraph();
   } catch(e){
-    console.error('Send exception:', e);
-    bubble.style.opacity = '0.4';
+    bubble.style.opacity = '0.6';
     bubble.style.textDecoration = 'line-through';
+    bubble.title = 'Not sent: network error';
+    setFriendStatus('Message not sent: network error');
   }
 }
 
@@ -618,12 +562,15 @@ document.getElementById('file-input').addEventListener('change', async function(
   const fd = new FormData();
   fd.append('chat_id', activeChatId);
   fd.append('file', file);
+  const attachText = document.getElementById('attach-text');
+  attachText.textContent = 'Uploading...';
+  this.disabled = true;
   try{
-    const r = await fetch('/api/constellation/upload', {method: 'POST', body: fd});
-    const d = await r.json();
-    if(d.success){ await loadMessages(); await refreshGraph(); }
-    else alert(d.error || 'Upload failed');
-  } catch(e){ alert('Upload error'); }
+    await readJson(await fetch('/api/constellation/upload', {method: 'POST', body: fd}));
+    await loadMessages(); await refreshGraph();
+  } catch(e){ alert(e.message || 'Upload failed'); }
+  attachText.textContent = 'Attach';
+  this.disabled = false;
   this.value = '';
 });
 
@@ -696,6 +643,9 @@ function renderGraph(data){
     .force('charge', d3.forceManyBody().strength(-260))
     .force('center', d3.forceCenter(W / 2, H / 2))
     .force('collision', d3.forceCollide().radius(n => nodeR(n) + 16))
+    // pull disconnected topic clusters toward the middle so they don't drift apart
+    .force('x', d3.forceX(W / 2).strength(0.08))
+    .force('y', d3.forceY(H / 2).strength(0.08))
     .stop();
 
   const iterations = Math.ceil(Math.log(simulation.alphaMin()) / Math.log(1 - simulation.alphaDecay()));
@@ -752,7 +702,8 @@ function renderGraph(data){
   const tooltip = document.getElementById('graph-tooltip');
   node.on('mouseover', (e, d) => {
     tooltip.style.display = 'block';
-    tooltip.innerHTML = `<strong>${d.label}</strong><br/>Mentions: ${d.mention_count}`;
+    // Labels come from chat text and uploaded file names, so never inject them as HTML
+    tooltip.innerHTML = `<strong>${escHtml(d.label)}</strong><br/>Mentions: ${escHtml(d.mention_count)}`;
   }).on('mousemove', e => {
     const rect = svgEl.getBoundingClientRect();
     tooltip.style.left = (e.clientX - rect.left + 14) + 'px';
@@ -791,8 +742,20 @@ function renderGraph(data){
     }
   };
 
+  // Fit the whole layout (plus room for labels) inside the panel; the force layout
+  // often spreads larger graphs well past the visible area
+  const pad = 40;
+  const minX = d3.min(nodes, n => n.x - nodeR(n) - 60), maxX = d3.max(nodes, n => n.x + nodeR(n) + 60);
+  const minY = d3.min(nodes, n => n.y - nodeR(n) - 10), maxY = d3.max(nodes, n => n.y + nodeR(n) + 30);
+  const fitScale = Math.max(0.2, Math.min(1.2, (W - pad * 2) / (maxX - minX), (H - pad * 2) / (maxY - minY)));
+  const fitTransform = d3.zoomIdentity
+    .translate(W / 2, H / 2)
+    .scale(fitScale)
+    .translate(-(minX + maxX) / 2, -(minY + maxY) / 2);
+  svg.call(zoom.transform, fitTransform);
+
   document.getElementById('center-graph-btn').onclick = () => {
-    svg.transition().duration(600).call(zoom.transform, d3.zoomIdentity);
+    svg.transition().duration(REDUCED_MOTION ? 0 : 600).call(zoom.transform, fitTransform);
   };
   document.getElementById('graph-sub').textContent = `${nodes.length} node${nodes.length!==1?'s':''} - ${edges.length} connection${edges.length!==1?'s':''}`;
 
@@ -822,7 +785,7 @@ function renderGraph(data){
 
     floatAnimId = requestAnimationFrame(floatTick);
   }
-  floatAnimId = requestAnimationFrame(floatTick);
+  if(!REDUCED_MOTION) floatAnimId = requestAnimationFrame(floatTick);
 }
 
 function highlightInChat(d){
@@ -848,7 +811,7 @@ function fmtTime(iso){
 }
 function truncate(s, n){ return s && s.length > n ? s.slice(0, n) + '...' : s; }
 function escHtml(s){
-  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
 }
 
 // loadMe() must complete first so myKey is correct before loadUsers() opens any chat
@@ -857,7 +820,16 @@ loadMe().then(() => {
   loadUsers();
   setInterval(async () => { await loadFriendRequests(); await loadUsers(); }, 5000);
 });
-window.addEventListener('resize', () => { if(activeChatId) refreshGraph(); });
+// Re-render when the graph area changes size (window resize, layout switch); the
+// data-change check in refreshGraph() would otherwise skip the redraw
+let resizeTimer = null;
+const graphCanvas = document.querySelector('.graph-canvas');
+const redrawGraph = () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { if(activeChatId){ lastGraphKey = ''; refreshGraph(); } }, 200);
+};
+if (window.ResizeObserver && graphCanvas) new ResizeObserver(redrawGraph).observe(graphCanvas);
+else window.addEventListener('resize', redrawGraph);
 </script>
 </body>
 </html>

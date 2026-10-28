@@ -21,7 +21,7 @@
 <body>
   {% include 'partials/header.html' %}
 
-  <main class="page-shell">
+  <main class="page-shell" id="main">
     <header class="page-header">
       <p class="badge">Your Order</p>
       <h1 class="page-title">Cart</h1>
@@ -39,7 +39,7 @@
               </div>
               <div style="font-weight: 700;">INR {{ '%.2f'|format(it.unit_price * it.quantity) }}</div>
               <div class="item-actions">
-                <button class="btn btn-danger" onclick="removeItem('{{ it.key }}')">Remove</button>
+                <button class="btn btn-danger" data-key="{{ it.key }}" onclick="removeItem(this.dataset.key, this)" aria-label="Remove {{ it.title }}">Remove</button>
               </div>
             </div>
           {% endfor %}
@@ -57,6 +57,10 @@
         <div class="section-card" style="text-align: center;">
           <h3>Your cart is empty.</h3>
           <p>Start from books or games to add items.</p>
+          <div class="hero-actions" style="justify-content: center;">
+            <a class="btn btn-primary" href="{{ url_for('books') }}">Browse Books</a>
+            <a class="btn btn-accent" href="{{ url_for('video_games') }}">Browse Games</a>
+          </div>
         </div>
       {% endif %}
     </section>
@@ -71,26 +75,29 @@
       const nodes = document.querySelectorAll('[data-cart-count]');
       nodes.forEach(n => n.textContent = count);
     }
-    function removeItem(key) {
-      fetch('/api/cart/remove', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ key })})
-        .then(r => r.json())
-        .then(d => {
-          if (!d.success) return alert(d.error || 'Failed');
-          const row = document.querySelector(`.item[data-key="${key}"]`);
-          if (row) row.remove();
-          document.getElementById('subtotal').textContent = d.subtotal.toFixed(2);
-          refreshBadge(d.count);
-          if (!document.querySelector('.item')) location.reload();
-        })
-        .catch(() => alert('Error'));
+    async function removeItem(key, btn) {
+      if (btn) btn.disabled = true;
+      try {
+        const res = await fetch('/api/cart/remove', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ key })});
+        const d = await readJson(res);
+        const row = Array.from(document.querySelectorAll('.item')).find(el => el.dataset.key === key);
+        if (row) row.remove();
+        document.getElementById('subtotal').textContent = Number(d.subtotal || 0).toFixed(2);
+        refreshBadge(d.count);
+        if (!document.querySelector('.item')) location.reload();
+      } catch (e) {
+        alert(e.message || 'Could not remove the item. Please try again.');
+        if (btn) btn.disabled = false;
+      }
     }
-    function clearCart() {
+    async function clearCart() {
       if (!confirm('Clear all items from cart?')) return;
-      fetch('/api/cart/clear', { method:'POST' })
-        .then(r => r.json())
-        .then(d => {
-          if (d.success) location.reload();
-        });
+      try {
+        await readJson(await fetch('/api/cart/clear', { method:'POST' }));
+        location.reload();
+      } catch (e) {
+        alert(e.message || 'Could not clear the cart. Please try again.');
+      }
     }
     function checkout() {
       window.location.href = '/checkout';

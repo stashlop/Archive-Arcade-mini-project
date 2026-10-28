@@ -10,7 +10,9 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='arcade.css') }}" />
   <style>
     .checkout-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 1.5rem; }
+    .checkout-grid > *, .row > * { min-width: 0; }
     .field { display: grid; gap: 0.4rem; margin-bottom: 0.9rem; }
+    .field input, .field select { width: 100%; }
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
     .order-item { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; }
     .total { display: flex; align-items: center; justify-content: space-between; margin-top: 1rem; font-weight: 700; }
@@ -23,7 +25,7 @@
 <body>
   {% include 'partials/header.html' %}
 
-  <main class="page-shell">
+  <main class="page-shell" id="main">
     <header class="page-header">
       <p class="badge">Secure Checkout</p>
       <h1 class="page-title">Payment Details</h1>
@@ -60,7 +62,8 @@
           </div>
         </div>
         <p class="page-subtitle">This is a demo checkout. No real payment is processed.</p>
-        <button class="btn btn-primary" type="submit">Pay INR {{ '%.2f'|format(subtotal) }}</button>
+        <button class="btn btn-primary" id="pay-btn" type="submit" {% if not items %}disabled{% endif %}>Pay INR {{ '%.2f'|format(subtotal) }}</button>
+        <div id="pay-msg" class="status-msg" role="status" aria-live="polite"></div>
       </form>
 
       <aside class="section-card">
@@ -94,23 +97,31 @@
       document.getElementById('cardField').style.display = (method === 'Card') ? 'block' : 'none';
       document.getElementById('upiField').style.display = (method === 'UPI') ? 'block' : 'none';
     }
-    function submitPayment(e){
+    async function submitPayment(e){
       e.preventDefault();
       const name = document.getElementById('name').value.trim();
       const email = document.getElementById('email').value.trim();
       const method = document.getElementById('method').value;
+      const btn = document.getElementById('pay-btn');
+      const msg = document.getElementById('pay-msg');
       const body = { buyer: { name, email }, paymentMethod: method };
-      fetch('/api/cart/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      }).then(r => r.json()).then(d => {
-        if (d.success) {
-          window.location.href = '/history';
-        } else {
-          alert(d.error || 'Payment failed');
-        }
-      }).catch(() => alert('Network error'));
+      btn.disabled = true;
+      msg.className = 'status-msg';
+      msg.textContent = 'Processing your order...';
+      try {
+        await readJson(await fetch('/api/cart/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        }));
+        msg.classList.add('is-success');
+        msg.textContent = 'Order placed. Redirecting to your history...';
+        window.location.href = '{{ url_for('history_page') }}';
+      } catch (err) {
+        msg.classList.add('is-error');
+        msg.textContent = err.message || 'Payment failed. Please try again.';
+        btn.disabled = false;
+      }
       return false;
     }
   </script>

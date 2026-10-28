@@ -6,7 +6,9 @@ import json
 import random
 import urllib.request
 import urllib.error
-from flask import Flask, render_template, request, session, redirect, url_for, flash, jsonify, make_response
+import re
+from datetime import datetime, timedelta
+from flask import Flask, render_template, request, session, redirect, url_for, flash, jsonify, make_response, abort
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 import dbconn
@@ -56,14 +58,51 @@ except ImportError:
     from books_api import books_bp, init_books_db
 
 try:
-    from .auth import auth_bp, init_app as init_auth_db
+    from .auth import auth_bp, init_app as init_auth_db, is_admin
 except ImportError:
-    from auth import auth_bp, init_app as init_auth_db
+    from auth import auth_bp, init_app as init_auth_db, is_admin
 
 try:
     from .cart_api import cart_bp
 except ImportError:
     from cart_api import cart_bp
+
+
+def _shared_instance_secret(instance_path):
+    """Return a secret key stored in the instance folder, creating it once.
+
+    Gunicorn runs several worker processes; they must all sign sessions and CSRF
+    tokens with the same key or users are randomly logged out. The key is written
+    to a temp file and hard-linked into place so concurrent workers agree on it.
+    """
+    import secrets
+    key_path = os.path.join(instance_path, '.secret_key')
+    try:
+        with open(key_path) as fh:
+            key = fh.read().strip()
+        if key:
+            return key
+    except OSError:
+        pass
+    tmp_path = f"{key_path}.{os.getpid()}.tmp"
+    try:
+        with open(tmp_path, 'w') as fh:
+            fh.write(secrets.token_hex(32))
+        os.chmod(tmp_path, 0o600)
+        try:
+            os.link(tmp_path, key_path)
+        except FileExistsError:
+            pass  # another worker won the race; use its key
+        with open(key_path) as fh:
+            return fh.read().strip()
+    except OSError:
+        # Read-only filesystem: fall back to a per-process key
+        return secrets.token_hex(32)
+    finally:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
 
 
 def create_app(config=None):
@@ -102,21 +141,28 @@ def create_app(config=None):
     if not secret:
         if app.debug or os.environ.get('FLASK_ENV') == 'development' or os.environ.get('TESTING') == '1':
             app.secret_key = "dev-secret-key-change-me"
-        elif os.environ.get('VERCEL') == '1' and database_url:
-            # Every serverless instance must sign sessions with the same key, otherwise
-            # users get logged out whenever a request lands on a different instance.
+        elif database_url:
+            # Every worker and instance must sign sessions with the same key, otherwise
+            # users get logged out whenever a request lands on a different one.
             import hashlib
-            app.logger.warning("SECRET_KEY is not set; deriving one from DATABASE_URL. Set SECRET_KEY in Vercel.")
+            app.logger.warning("SECRET_KEY is not set; deriving one from DATABASE_URL. Set SECRET_KEY explicitly.")
             app.secret_key = hashlib.sha256(('arcade-session:' + database_url).encode()).hexdigest()
         else:
-            import secrets
-            app.secret_key = secrets.token_hex(32)
-            app.logger.warning("SECRET_KEY is not set; using a per-process random key. "
-                               "Sessions and CSRF tokens will not survive restarts or work across serverless instances.")
+            app.secret_key = _shared_instance_secret(app.instance_path)
+            app.logger.warning("SECRET_KEY is not set; using a key generated in the instance folder. "
+                               "Sessions will not survive a redeploy. Set SECRET_KEY explicitly.")
     else:
         app.secret_key = secret
 
     app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=14)
+    # Render and Vercel terminate TLS at their proxy and forward the original scheme
+    behind_proxy = bool(os.environ.get('RENDER') or os.environ.get('VERCEL') or os.environ.get('TRUST_PROXY') == '1')
+    if behind_proxy:
+        from werkzeug.middleware.proxy_fix import ProxyFix
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
+        app.config['SESSION_COOKIE_SECURE'] = True
 
     if app.config.get('SQLALCHEMY_DATABASE_URI'):
         pass  # explicitly configured (e.g. tests)
@@ -148,12 +194,58 @@ def create_app(config=None):
 
     @app.after_request
     def inject_csrf_cookie(response):
-        if app.config.get('WTF_CSRF_ENABLED', True):
+        # Only pages need the token; skip static files, JSON and health checks
+        if app.config.get('WTF_CSRF_ENABLED', True) and response.mimetype == 'text/html':
             try:
-                response.set_cookie('csrf_token', generate_csrf(), samesite='Lax')
+                response.set_cookie('csrf_token', generate_csrf(), samesite='Lax',
+                                    secure=app.config.get('SESSION_COOKIE_SECURE', False))
             except Exception:
                 pass
         return response
+
+    @app.after_request
+    def security_headers(response):
+        response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+        response.headers.setdefault('X-Frame-Options', 'SAMEORIGIN')
+        response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+        return response
+
+    def _wants_json():
+        return request.path.startswith('/api/') or request.is_json or \
+            request.accept_mimetypes.best == 'application/json'
+
+    def _server_error(message='Something went wrong. Please try again.', success_key=False):
+        """Log the active exception and return a generic JSON error (no internals leaked)."""
+        app.logger.exception("Request to %s failed", request.path)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        body = {'error': message}
+        if success_key:
+            body['success'] = False
+        return jsonify(body), 500
+
+    @app.errorhandler(400)
+    def bad_request(e):
+        message = getattr(e, 'description', None) or 'Bad request.'
+        if _wants_json():
+            return jsonify({'error': message}), 400
+        return render_template('error.html', code=400, title='Bad request', message=message), 400
+
+    @app.errorhandler(404)
+    def not_found(e):
+        if _wants_json():
+            return jsonify({'error': 'Not found'}), 404
+        return render_template('error.html', code=404, title='Page not found',
+                               message="The page you're looking for doesn't exist or has moved."), 404
+
+    @app.errorhandler(500)
+    def internal_error(e):
+        if _wants_json():
+            return jsonify({'error': 'Something went wrong. Please try again.'}), 500
+        return render_template('error.html', code=500, title='Something went wrong',
+                               message='An unexpected error occurred. Please try again in a moment.'), 500
 
     @app.errorhandler(413)
     def file_too_large(e):
@@ -162,9 +254,15 @@ def create_app(config=None):
         flash('Uploaded file is too large (max 16 MB).', 'error')
         return redirect(request.url), 413
 
-    # Initialize CORS for cross-device WiFi support
+    @app.route('/healthz')
+    def healthz():
+        # Lightweight liveness probe for Render; deliberately does not touch the database
+        return jsonify({'status': 'ok'})
+
+    # Initialize CORS for cross-device WiFi support (CORS_ORIGINS="https://a.com,https://b.com" to restrict)
     if CORS is not None:
-        CORS(app, resources={r"/api/*": {"origins": "*"}})
+        cors_origins = [o.strip() for o in (os.getenv('CORS_ORIGINS') or '*').split(',') if o.strip()]
+        CORS(app, resources={r"/api/*": {"origins": cors_origins if cors_origins != ['*'] else '*'}})
 
     # ---- Currency helpers ----
     @app.template_filter('inr')
@@ -524,6 +622,8 @@ def create_app(config=None):
     def create_tables():
         if hasattr(app, 'db_initialized'):
             return
+        if request.endpoint in ('healthz', 'static'):
+            return
         if dbconn.is_postgres():
             # Several serverless instances can cold-start at once; let only one
             # create tables and seed the catalog at a time. A transaction-scoped
@@ -578,8 +678,18 @@ def create_app(config=None):
             db.session.rollback()
         # Ensure a default admin user exists for demo access
         try:
-            if not User.query.filter_by(username='admin').first():
-                admin_pw = os.getenv('ADMIN_DEFAULT_PASSWORD', 'admin123')
+            if not User.query.filter(func.lower(User.username) == 'admin').first():
+                admin_pw = os.getenv('ADMIN_DEFAULT_PASSWORD')
+                if not admin_pw:
+                    if _is_dev_mode():
+                        admin_pw = 'admin123'
+                    else:
+                        # Never ship a guessable admin password; the account still reserves the name
+                        import secrets
+                        admin_pw = secrets.token_urlsafe(24)
+                        app.logger.warning("ADMIN_DEFAULT_PASSWORD is not set; the 'admin' account was created "
+                                           "with a random password. Set ADMIN_DEFAULT_PASSWORD before first boot "
+                                           "to sign in as admin.")
                 admin_user = User(username='admin', email='admin@arcade.local', password_hash=generate_password_hash(admin_pw), user_tag=_generate_user_tag())
                 db.session.add(admin_user)
                 db.session.commit()
@@ -587,6 +697,14 @@ def create_app(config=None):
             db.session.rollback()
             # Do not block app startup if seeding fails
             pass
+
+    def _login_redirect():
+        nxt = request.full_path.rstrip('?') if request.method == 'GET' else None
+        return redirect(url_for('login', next=nxt) if nxt and nxt != '/' else url_for('login'))
+
+    def _is_dev_mode():
+        return bool(app.debug or app.config.get('TESTING') or os.environ.get('TESTING') == '1'
+                    or os.environ.get('FLASK_ENV') == 'development')
 
     @app.context_processor
     def inject_cart_count():
@@ -665,13 +783,16 @@ def create_app(config=None):
     def home():
         # Dashboard for logged in users
         if 'user' not in session and 'user_id' not in session:
-            return redirect(url_for('login'))
+            return _login_redirect()
         return redirect(url_for('index'))
 
     @app.route('/api/network-status')
     def network_status():
         """Network diagnostics endpoint for cross-device connectivity testing"""
         import socket
+        # Host names and internal IPs are only useful on a LAN; don't publish them in production
+        if not (_is_dev_mode() or os.environ.get('ENABLE_NETWORK_DIAGNOSTICS') == '1'):
+            return jsonify({'status': 'online'})
         try:
             hostname = socket.gethostname()
             ip_addr = socket.gethostbyname(hostname)
@@ -694,107 +815,136 @@ def create_app(config=None):
                 'same_network': client_ip.startswith(ip_addr.rsplit('.', 1)[0]) if '.' in ip_addr and '.' in client_ip else False,
                 'timestamp': str(__import__('datetime').datetime.now().isoformat())
             })
-        except Exception as e:
+        except Exception:
+            app.logger.exception("Network diagnostics failed")
             return jsonify({
                 'status': 'error',
-                'message': str(e),
+                'message': 'Could not resolve the server address',
                 'client_ip': request.remote_addr
             }), 500
 
+    _USERNAME_RE = re.compile(r'^[A-Za-z0-9_.-]{3,32}$')
+    _EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+    MIN_PASSWORD_LENGTH = 8
+
+    def _username_error(name):
+        if not _USERNAME_RE.match(name or ''):
+            return 'Username must be 3-32 characters: letters, numbers, dots, dashes or underscores.'
+        return None
+
+    def _username_taken(name, exclude_id=None):
+        # Case-insensitive: admin rights are granted by name, so "Admin" must not coexist with "admin"
+        q = User.query.filter(func.lower(User.username) == name.lower())
+        if exclude_id:
+            q = q.filter(User.id != exclude_id)
+        return q.first() is not None
+
+    def _safe_next(target):
+        """Only allow redirects to local paths (blocks //evil.com and backslash tricks)."""
+        target = (target or '').strip()
+        # Browsers drop tabs/newlines from URLs, so "/\t/evil.com" would become "//evil.com"
+        if any(c.isspace() or ord(c) < 32 for c in target):
+            return None
+        if target.startswith('/') and not target.startswith('//') and '\\' not in target:
+            return target
+        return None
+
+    def _link_community_email(user_id):
+        cem = (session.get('community_email') or '').strip().lower()
+        if not cem:
+            return
+        try:
+            conn = dbconn.connect(_community_db_path())
+            _ensure_community_tables(conn)
+            cur = conn.cursor()
+            cur.execute("UPDATE community_subscribers SET user_id=? WHERE email=?", (int(user_id), cem))
+            conn.commit(); conn.close()
+        except Exception:
+            app.logger.exception("Failed to link community email to account")
+
+    def _start_session(user):
+        _ensure_user_tag(user)
+        session['user'] = user.username
+        session['username'] = user.username
+        session['user_id'] = user.id
+        session['user_tag'] = user.user_tag
+        session.permanent = True
+        if _mongo_available():
+            _mongo_current_user()
+        _link_community_email(user.id)
+
     @app.route('/login', methods=['GET', 'POST'])
     def login():
+        next_url = _safe_next(request.values.get('next'))
+        if request.method == 'GET' and (session.get('user_id') or session.get('user')):
+            return redirect(next_url or url_for('index'))
         if request.method == 'POST':
-            username = (request.form.get('ident') or '').strip()
-            password = request.form.get('password')
-            if not username or not password:
-                flash("Please enter both username and password")
-                return redirect(url_for('login'))
+            ident = (request.form.get('ident') or '').strip()
+            password = request.form.get('password') or ''
+            if not ident or not password:
+                flash('Please enter both your username (or email) and password.', 'error')
+                return render_template('login.html', ident=ident, next_url=next_url)
 
-            user = User.query.filter((User.username == username) | (User.email == username.lower())).first()
+            user = User.query.filter((User.username == ident) | (User.email == ident.lower())).first()
             if user and check_password_hash(user.password_hash, password):
-                _ensure_user_tag(user)
-                session['user'] = user.username
-                session['username'] = user.username
-                session['user_id'] = user.id  # Add user_id to match auth.py
-                session['user_tag'] = user.user_tag
-                if _mongo_available():
-                    _mongo_current_user()
-                # If a community email is present from a prior join, link it to this account
-                try:
-                    cem = (session.get('community_email') or '').strip().lower()
-                    if cem:
-                        dbp = _community_db_path()
-                        conn = dbconn.connect(dbp)
-                        _ensure_community_tables(conn)
-                        cur = conn.cursor()
-                        cur.execute("UPDATE community_subscribers SET user_id=? WHERE email=?", (int(user.id), cem))
-                        conn.commit(); conn.close()
-                except Exception:
-                    pass
-                return redirect(url_for('home'))
-            else:
-                flash('Invalid username or password')
-        return render_template('login.html')
+                _start_session(user)
+                return redirect(next_url or url_for('index'))
+            flash('Invalid username or password.', 'error')
+            return render_template('login.html', ident=ident, next_url=next_url)
+        return render_template('login.html', next_url=next_url)
 
     @app.route('/signup', methods=['GET', 'POST'])
     def signup():
         if request.method == 'POST':
             username = (request.form.get('username') or '').strip()
             email = (request.form.get('email') or '').strip().lower()
-            password = request.form.get('password')
-            if not username or not email or not password:
-                flash("Username, email and password are required")
-                return redirect(url_for('signup'))
+            password = request.form.get('password') or ''
+            form = {'username': username, 'email': email}
 
-            if User.query.filter_by(username=username).first():
-                flash('Username already exists')
-            elif User.query.filter_by(email=email).first():
-                flash('Email already exists')
-            else:
-                hashed_pw = generate_password_hash(password)
-                new_user = User(username=username, email=email, password_hash=hashed_pw, user_tag=_generate_user_tag())
-                db.session.add(new_user)
+            error = None
+            if not username or not email or not password:
+                error = 'Username, email and password are required.'
+            elif _username_error(username):
+                error = _username_error(username)
+            elif not _EMAIL_RE.match(email) or len(email) > 255:
+                error = 'Please enter a valid email address.'
+            elif len(password) < MIN_PASSWORD_LENGTH:
+                error = f'Password must be at least {MIN_PASSWORD_LENGTH} characters.'
+            elif _username_taken(username):
+                error = 'That username is already taken.'
+            elif User.query.filter(func.lower(User.email) == email).first():
+                error = 'An account with that email already exists.'
+            if error:
+                flash(error, 'error')
+                return render_template('signup.html', form=form)
+
+            new_user = User(username=username, email=email,
+                            password_hash=generate_password_hash(password), user_tag=_generate_user_tag())
+            db.session.add(new_user)
+            try:
                 db.session.commit()
-                # Reset and set session identity to the new user
-                session.pop('user', None)
-                session.pop('username', None)
-                session.pop('user_id', None)
-                session['user'] = username
-                session['username'] = username
-                session['user_id'] = new_user.id
-                session['user_tag'] = new_user.user_tag
-                if _mongo_available():
-                    _mongo_current_user()
-                # Link existing community email (if any in session) to new account
-                try:
-                    cem = (session.get('community_email') or '').strip().lower()
-                    if cem:
-                        dbp = _community_db_path()
-                        conn = dbconn.connect(dbp)
-                        _ensure_community_tables(conn)
-                        cur = conn.cursor()
-                        cur.execute("UPDATE community_subscribers SET user_id=? WHERE email=?", (int(new_user.id), cem))
-                        conn.commit(); conn.close()
-                except Exception:
-                    pass
-                return redirect(url_for('home'))
-        return render_template('signup.html')
+            except Exception:
+                # Lost a race with a concurrent signup for the same name/email
+                db.session.rollback()
+                app.logger.warning("Signup failed for %r", username, exc_info=True)
+                flash('That username or email is already registered.', 'error')
+                return render_template('signup.html', form=form)
+            _start_session(new_user)
+            flash('Welcome to Arcade! Your account is ready.', 'success')
+            return redirect(url_for('index'))
+        return render_template('signup.html', form={})
 
     @app.route('/logout')
     def logout():
         # Clear all identity and cart data to avoid cross-user leakage
-        session.pop('user', None)
-        session.pop('username', None)
-        session.pop('user_id', None)
-        session.pop('user_tag', None)
-        session.pop('cart', None)
-        session.pop('community_email', None)
+        session.clear()
+        flash('You have been signed out.', 'info')
         return redirect(url_for('index'))
 
     @app.route('/books')
     def books():
         if 'user' not in session and 'user_id' not in session:
-            return redirect(url_for('login'))
+            return _login_redirect()
         
         try:
             # Get books from database
@@ -850,12 +1000,13 @@ def create_app(config=None):
                                  selected_category=category, search_term=search)
             
         except Exception as e:
-            return f"Database error: {str(e)}", 500
+            app.logger.exception("Catalog page failed")
+            abort(500)
 
     @app.route('/video_games')  # Changed from /video-games to /video_games
     def video_games():
         if 'user' not in session and 'user_id' not in session:
-            return redirect(url_for('login'))
+            return _login_redirect()
         
         try:
             # Get games from database
@@ -944,7 +1095,8 @@ def create_app(config=None):
             return render_template('video_games.html', games=games, categories=categories)
             
         except Exception as e:
-            return f"Database error: {str(e)}", 500
+            app.logger.exception("Catalog page failed")
+            abort(500)
 
     # Convenience redirect for old URL style
     @app.route('/video-games')
@@ -955,7 +1107,7 @@ def create_app(config=None):
     def admin_seed_games():
         # Admin-only helper to (re)seed the games catalog on demand
         if not (session.get('user') or session.get('user_id')):
-            return redirect(url_for('login'))
+            return _login_redirect()
         if not _is_admin():
             return "Forbidden: Admins only", 403
         force = (request.args.get('force') or '').strip().lower() in ('1', 'true', 'yes')
@@ -1007,12 +1159,13 @@ def create_app(config=None):
             conn.close()
             return msg
         except Exception as e:
-            return f"Seeding error: {e}", 500
+            app.logger.exception("Seeding games failed")
+            return "Seeding failed; see server logs.", 500
 
     @app.route('/cafe')
     def cafe():
         if 'user' not in session and 'user_id' not in session:
-            return redirect(url_for('login'))
+            return _login_redirect()
         return render_template('cafe.html')
 
     @app.route('/api/cafe/availability')
@@ -1097,6 +1250,12 @@ def create_app(config=None):
             pass
         conn.commit()
 
+    def _parse_date(date_str):
+        try:
+            return datetime.strptime(date_str or '', '%Y-%m-%d').date()
+        except ValueError:
+            return None
+
     def _slot_capacity():
         try:
             cap = int(os.getenv('CAFE_SLOT_CAPACITY', '10'))
@@ -1155,10 +1314,8 @@ def create_app(config=None):
         if 'user' not in session and 'user_id' not in session:
             return jsonify({'error': 'Authentication required'}), 401
         date = (request.args.get('date') or '').strip()
-        try:
-            _ = date and len(date) == 10
-        except Exception:
-            return jsonify({'error': 'Invalid or missing date'}), 400
+        if not _parse_date(date):
+            return jsonify({'error': 'Invalid or missing date (use YYYY-MM-DD)'}), 400
         # Closed or members-only days
         if _is_closed(date):
             return jsonify({'date': date, 'closed': True, 'members_only': False, 'slots': []})
@@ -1188,7 +1345,7 @@ def create_app(config=None):
                 m += step_min
             conn.close()
         except Exception as e:
-            return jsonify({'error': f'Failed to load slots: {e}'}), 500
+            return _server_error('Failed to load slots. Please try again.')
         return jsonify({'date': date, 'closed': False, 'members_only': False, 'capacity': cap, 'duration': default_dur, 'slots': slots})
 
     @app.route('/api/cafe/book', methods=['POST'])
@@ -1197,18 +1354,37 @@ def create_app(config=None):
             return jsonify({'error': 'Authentication required'}), 401
 
         data = request.get_json(silent=True) or {}
-        date = (data.get('date') or '').strip()
-        time = (data.get('time') or '').strip()
-        party_size = int(data.get('partySize') or 1)
-        duration_min = int(data.get('duration') or os.getenv('CAFE_DEFAULT_DURATION', '60'))
-        note = (data.get('note') or '').strip()
+        date = str(data.get('date') or '').strip()
+        time = str(data.get('time') or '').strip()
+        note = str(data.get('note') or '').strip()[:500]
+        try:
+            party_size = int(data.get('partySize') or 1)
+            duration_min = int(data.get('duration') or os.getenv('CAFE_DEFAULT_DURATION', '60'))
+        except (TypeError, ValueError):
+            return jsonify({'error': 'partySize and duration must be whole numbers'}), 400
 
         if not date or not time:
             return jsonify({'error': 'date and time are required'}), 400
+        day = _parse_date(date)
+        if not day:
+            return jsonify({'error': 'Invalid date (use YYYY-MM-DD)'}), 400
+        if not re.match(r'^([01]\d|2[0-3]):[0-5]\d$', time):
+            return jsonify({'error': 'Invalid time (use HH:MM)'}), 400
+        # Allow "today" in any timezone (UTC-12 .. UTC+14) but nothing earlier
+        if day < (datetime.utcnow() - timedelta(hours=12)).date():
+            return jsonify({'error': 'Bookings cannot be made for past dates'}), 400
         if party_size < 1:
             return jsonify({'error': 'partySize must be >= 1'}), 400
+        if party_size > _slot_capacity():
+            return jsonify({'error': f'Party size cannot exceed {_slot_capacity()} guests'}), 400
         if duration_min < 30 or duration_min > 240:
             return jsonify({'error': 'duration must be between 30 and 240 minutes'}), 400
+        open_min = _parse_time_to_min(os.getenv('CAFE_OPEN', '10:00'))
+        close_min = _parse_time_to_min(os.getenv('CAFE_CLOSE', '22:00'))
+        start = _parse_time_to_min(time)
+        if start < open_min or start + duration_min > close_min:
+            return jsonify({'error': f"The cafe is open {os.getenv('CAFE_OPEN', '10:00')}-{os.getenv('CAFE_CLOSE', '22:00')}; "
+                                     "pick a time and duration within opening hours"}), 400
 
         # Enforce day rules
         if _is_closed(date):
@@ -1266,7 +1442,7 @@ def create_app(config=None):
                 except Exception:
                     pass
                 conn.close()
-                return jsonify({'error': f'Failed to save booking: {e}'}), 500
+                return _server_error('Failed to save booking. Please try again.')
 
     @app.route('/api/cafe/bookings', methods=['GET'])
     def cafe_my_bookings():
@@ -1286,7 +1462,7 @@ def create_app(config=None):
             conn.close()
             return jsonify(rows)
         except Exception as e:
-            return jsonify({'error': str(e)}), 500
+            return _server_error()
 
     @app.route('/api/cafe/bookings/<int:bid>', methods=['DELETE'])
     def cafe_cancel_booking(bid: int):
@@ -1319,12 +1495,12 @@ def create_app(config=None):
             conn.close()
             return jsonify({'success': True})
         except Exception as e:
-            return jsonify({'error': str(e)}), 500
+            return _server_error()
 
     @app.route('/cart')
     def cart():
         if 'user' not in session and 'user_id' not in session:
-            return redirect(url_for('login'))
+            return _login_redirect()
         items = session.get('cart', {}).get('items', [])
         subtotal = sum((i.get('unit_price', 0) * i.get('quantity', 1)) for i in items)
         return render_template('cart.html', items=items, subtotal=round(subtotal, 2))
@@ -1332,7 +1508,7 @@ def create_app(config=None):
     @app.route('/checkout')
     def checkout_page():
         if 'user' not in session and 'user_id' not in session:
-            return redirect(url_for('login'))
+            return _login_redirect()
         items = session.get('cart', {}).get('items', [])
         subtotal = sum((i.get('unit_price', 0) * i.get('quantity', 1)) for i in items)
         return render_template('checkout.html', items=items, subtotal=round(subtotal, 2))
@@ -1340,7 +1516,7 @@ def create_app(config=None):
     @app.route('/history')
     def history_page():
         if 'user' not in session and 'user_id' not in session:
-            return redirect(url_for('login'))
+            return _login_redirect()
         # Render a page that loads history via API for current user
         return render_template('history.html')
 
@@ -1359,9 +1535,9 @@ def create_app(config=None):
     @app.route('/community/join', methods=['POST'])
     def community_join():
         # Open to all; users can join by email without logging in
-        email = (request.json.get('email') if request.is_json else request.form.get('email')) or ''
-        email = email.strip().lower()
-        if not email or '@' not in email or '.' not in email:
+        payload = request.get_json(silent=True) if request.is_json else request.form
+        email = str((payload or {}).get('email') or '').strip().lower()
+        if not _EMAIL_RE.match(email) or len(email) > 255:
             return jsonify({'success': False, 'error': 'Please enter a valid email'}), 400
         from datetime import datetime as _dt
         try:
@@ -1380,7 +1556,7 @@ def create_app(config=None):
             session['community_email'] = email
             return jsonify({'success': True})
         except Exception as e:
-            return jsonify({'success': False, 'error': str(e)}), 500
+            return _server_error(success_key=True)
 
     @app.route('/api/community/messages', methods=['GET', 'POST'])
     def community_messages():
@@ -1397,14 +1573,16 @@ def create_app(config=None):
                 conn.close()
                 return jsonify(rows)
             except Exception as e:
-                return jsonify({'error': str(e)}), 500
+                return _server_error()
         # POST -> admin-only create message
         if not (session.get('user') or session.get('user_id')) or not _is_admin():
             return jsonify({'error': 'Admins only'}), 403
         data = request.get_json(silent=True) or {}
-        content = (data.get('content') or '').strip()
+        content = str(data.get('content') or '').strip()
         if not content:
             return jsonify({'error': 'Message cannot be empty'}), 400
+        if len(content) > 2000:
+            return jsonify({'error': 'Message is too long (max 2000 characters)'}), 400
         from datetime import datetime as _dt
         try:
             dbp = _community_db_path()
@@ -1425,7 +1603,7 @@ def create_app(config=None):
             conn.close()
             return jsonify({'success': True, 'id': mid})
         except Exception as e:
-            return jsonify({'error': str(e)}), 500
+            return _server_error()
 
     @app.route('/api/community/subscribers', methods=['GET'])
     def community_subscribers():
@@ -1469,7 +1647,7 @@ def create_app(config=None):
             conn.close()
             return jsonify(rows)
         except Exception as e:
-            return jsonify({'error': str(e)}), 500
+            return _server_error()
 
     @app.route('/community/profile', methods=['POST'])
     def community_profile():
@@ -1477,7 +1655,7 @@ def create_app(config=None):
         email = (session.get('community_email') or '').strip().lower()
         if not email:
             return jsonify({'success': False, 'error': 'Join the community with your email first from Home'}), 403
-        display_name = (request.form.get('display_name') or '').strip()
+        display_name = (request.form.get('display_name') or '').strip()[:120]
         photo = request.files.get('photo')
         # Find or create subscriber row
         from datetime import datetime as _dt
@@ -1507,6 +1685,12 @@ def create_app(config=None):
                 if ext not in ('.png', '.jpg', '.jpeg', '.webp'):
                     conn.close()
                     return jsonify({'success': False, 'error': 'Only PNG, JPG, JPEG, WEBP allowed'}), 400
+                header = photo.read(16)
+                photo.seek(0)
+                if not (header.startswith(b'\x89PNG\r\n\x1a\n') or header.startswith(b'\xff\xd8\xff')
+                        or (header.startswith(b'RIFF') and header[8:12] == b'WEBP')):
+                    conn.close()
+                    return jsonify({'success': False, 'error': 'That file is not a valid PNG, JPG or WEBP image'}), 400
                 new_name = f"sub_{sub_id}{ext}"
                 saved_rel_path, err = _store_upload(photo, 'community', new_name, resource_type='image')
                 if err:
@@ -1535,7 +1719,7 @@ def create_app(config=None):
             conn.close()
             return jsonify({'success': True})
         except Exception as e:
-            return jsonify({'success': False, 'error': str(e)}), 500
+            return _server_error(success_key=True)
 
     @app.route('/api/community/me', methods=['GET'])
     def community_me():
@@ -1566,7 +1750,7 @@ def create_app(config=None):
                 'photo_url': photo_url
             })
         except Exception as e:
-            return jsonify({'error': str(e)}), 500
+            return _server_error()
 
     @app.route('/account/username', methods=['POST'])
     def account_change_username():
@@ -1576,23 +1760,27 @@ def create_app(config=None):
             return jsonify({'success': False, 'error': 'Login required'}), 401
         data = request.get_json(silent=True) or {}
         new_username = (data.get('username') or '').strip()
-        if not new_username or len(new_username) < 3:
-            return jsonify({'success': False, 'error': 'Username must be at least 3 characters'}), 400
+        error = _username_error(new_username)
+        if error:
+            return jsonify({'success': False, 'error': error}), 400
         try:
-            # Check availability
-            if User.query.filter_by(username=new_username).first():
+            # Check availability (case-insensitive, ignoring the user's own row)
+            if _username_taken(new_username, exclude_id=int(uid)):
                 return jsonify({'success': False, 'error': 'Username already taken'}), 409
-            user = User.query.get(int(uid))
+            user = db.session.get(User, int(uid))
             if not user:
                 return jsonify({'success': False, 'error': 'User not found'}), 404
+            if user.username.lower() == 'admin' and new_username.lower() != 'admin':
+                return jsonify({'success': False, 'error': 'The admin account cannot be renamed'}), 400
             user.username = new_username
             db.session.commit()
             # Update session display name
             session['user'] = new_username
-            return jsonify({'success': True})
+            session['username'] = new_username
+            return jsonify({'success': True, 'username': new_username})
         except Exception as e:
             db.session.rollback()
-            return jsonify({'success': False, 'error': str(e)}), 500
+            return _server_error(success_key=True)
 
     # ---------------- Blueprints ----------------
     app.register_blueprint(games_bp)
@@ -1614,7 +1802,9 @@ def create_app(config=None):
         path = request.path or '/'
         if any(path.startswith(p) for p in RESTRICTED_PREFIXES):
             if not session.get('user') and not session.get('user_id'):
-                return redirect(url_for('login'))
+                if path.startswith('/api/'):
+                    return jsonify({'error': 'Authentication required'}), 401
+                return _login_redirect()
 
     @app.context_processor
     def inject_admin_flag():
@@ -1639,23 +1829,12 @@ def create_app(config=None):
 
     # ---------------- Admin Dashboard ----------------
     def _is_admin():
-        # Simple demo admin check: username 'admin' or user_id == 1, or env ADMIN_USERS contains username
-        uname = session.get('user') or session.get('username') or ''
-        if uname.lower() == 'admin':
-            return True
-        if (session.get('user_id') or 0) == 1:
-            return True
-        admin_users = os.getenv('ADMIN_USERS', '')
-        if admin_users:
-            allowed = {u.strip().lower() for u in admin_users.split(',') if u.strip()}
-            if uname.lower() in allowed:
-                return True
-        return False
+        return is_admin()
 
     @app.route('/admin')
     def admin_dashboard():
         if not (session.get('user') or session.get('user_id')):
-            return redirect(url_for('login'))
+            return _login_redirect()
         if not _is_admin():
             return "Forbidden: Admins only", 403
 
@@ -1748,7 +1927,7 @@ def create_app(config=None):
     def admin_update_delivery(pid: int):
         # Admin-only endpoint to update delivery status
         if not (session.get('user') or session.get('user_id')):
-            return redirect(url_for('login'))
+            return _login_redirect()
         if not _is_admin():
             return jsonify({'error': 'Admins only'}), 403
         data = request.get_json(silent=True) or {}
@@ -1777,12 +1956,12 @@ def create_app(config=None):
             conn.close()
             return jsonify({'success': True, 'status': status_norm})
         except Exception as e:
-            return jsonify({'error': str(e)}), 500
+            return _server_error()
 
     @app.route('/admin/revenue.csv')
     def admin_revenue_csv():
         if not (session.get('user') or session.get('user_id')):
-            return redirect(url_for('login'))
+            return _login_redirect()
         if not _is_admin():
             return "Forbidden: Admins only", 403
         games_dbp = _unified_db_path()
@@ -2237,13 +2416,13 @@ def create_app(config=None):
     @app.route('/constellation')
     def constellation_page():
         if 'user' not in session and 'user_id' not in session:
-            return redirect(url_for('login'))
+            return _login_redirect()
         return render_template('constellation.html')
 
     @app.route('/constellation/<path:other_uid>')
     def constellation_chat(other_uid):
         if 'user' not in session and 'user_id' not in session:
-            return redirect(url_for('login'))
+            return _login_redirect()
         return render_template('constellation.html', open_uid=other_uid)
 
     # --- API: current user friendship identity ---
@@ -2298,7 +2477,7 @@ def create_app(config=None):
             users = User.query.filter(User.id.in_(friend_ids)).order_by(User.username).all()
             return jsonify([_public_user(u) for u in users])
         except Exception as e:
-            return jsonify({'error': str(e)}), 500
+            return _server_error()
 
     @app.route('/api/constellation/friends/requests')
     def constellation_friend_requests():
@@ -2351,7 +2530,7 @@ def create_app(config=None):
             conn.close()
             return jsonify(requests)
         except Exception as e:
-            return jsonify({'error': str(e)}), 500
+            return _server_error()
 
     @app.route('/api/constellation/friends/request', methods=['POST'])
     def constellation_send_friend_request():
@@ -2433,7 +2612,7 @@ def create_app(config=None):
             conn.close()
             return jsonify({'success': True, 'status': 'pending'})
         except Exception as e:
-            return jsonify({'error': str(e)}), 500
+            return _server_error()
 
     @app.route('/api/constellation/friends/respond', methods=['POST'])
     def constellation_respond_friend_request():
@@ -2471,7 +2650,10 @@ def create_app(config=None):
             return jsonify({'success': True, 'status': status})
         me = int(session.get('user_id') or 0)
         data = request.get_json(silent=True) or {}
-        req_id = int(data.get('request_id') or 0)
+        try:
+            req_id = int(data.get('request_id') or 0)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'request not found'}), 404
         action = (data.get('action') or '').strip().lower()
         if action not in ('accept', 'decline'):
             return jsonify({'error': 'action must be accept or decline'}), 400
@@ -2498,7 +2680,7 @@ def create_app(config=None):
             conn.close()
             return jsonify({'success': True, 'status': status})
         except Exception as e:
-            return jsonify({'error': str(e)}), 500
+            return _server_error()
 
     # --- API: get or create chat id ---
     @app.route('/api/constellation/chat/<path:other_uid>')
@@ -2523,17 +2705,25 @@ def create_app(config=None):
             )
             return jsonify({'chat_id': chat_id})
         
-        other_uid = int(other_uid)
+        try:
+            other_uid = int(other_uid)
+        except ValueError:
+            return jsonify({'error': 'user not found'}), 404
         me = int(session.get('user_id') or 0)
         if other_uid == me:
             return jsonify({'error': 'choose another user to start a chat'}), 400
         if not db.session.get(User, other_uid):
             return jsonify({'error': 'user not found'}), 404
         try:
-            # Check if users are friends (SQLAlchemy-based)
-            # For now, we'll allow any two users to chat if they exist
-            # In the future, you may want to add a friend verification check here
-            
+            # Same rule as the MongoDB path: only accepted friends can chat
+            conn = dbconn.connect(_constellation_db_path())
+            conn.row_factory = sqlite3.Row
+            _ensure_constellation_tables(conn)
+            friends = _are_friends(conn.cursor(), me, other_uid)
+            conn.close()
+            if not friends:
+                return jsonify({'error': 'friend request must be accepted before chatting'}), 403
+
             # Get or create chat using SQLAlchemy
             chat = ConstellationChat.query.filter(
                 db.or_(
@@ -2558,7 +2748,7 @@ def create_app(config=None):
             return jsonify({'chat_id': chat.id})
         except Exception as e:
             db.session.rollback()
-            return jsonify({'error': str(e)}), 500
+            return _server_error()
 
     # --- API: load messages for a chat ---
     @app.route('/api/constellation/messages/<path:chat_id>')
@@ -2628,7 +2818,7 @@ def create_app(config=None):
             
             return jsonify(rows)
         except Exception as e:
-            return jsonify({'error': str(e)}), 500
+            return _server_error()
 
     # --- API: send message ---
     @app.route('/api/constellation/send', methods=['POST'])
@@ -2662,7 +2852,10 @@ def create_app(config=None):
         
         # Use SQLAlchemy models for persistence
         me = int(session.get('user_id') or 0)
-        chat_id = int(chat_id_raw)
+        try:
+            chat_id = int(chat_id_raw)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'not found'}), 404
         from datetime import datetime as _dt
         try:
             # Verify membership using SQLAlchemy models
@@ -2730,7 +2923,7 @@ def create_app(config=None):
             return jsonify({'success': True, 'id': msg_id, 'topics_found': topics})
         except Exception as e:
             db.session.rollback()
-            return jsonify({'error': str(e)}), 500
+            return _server_error()
 
     # --- Ideas mode: messages ---
     @app.route('/api/constellation/ideas/messages/<path:chat_id>')
@@ -2766,7 +2959,10 @@ def create_app(config=None):
             return jsonify(rows)
         
         # Use SQLAlchemy models
-        chat_id = int(chat_id)
+        try:
+            chat_id = int(chat_id)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'not found'}), 404
         me = int(session.get('user_id') or 0)
         try:
             # Verify membership
@@ -2791,7 +2987,7 @@ def create_app(config=None):
             
             return jsonify(rows)
         except Exception as e:
-            return jsonify({'error': str(e)}), 500
+            return _server_error()
 
     @app.route('/api/constellation/ideas/send', methods=['POST'])
     def constellation_idea_send():
@@ -2828,7 +3024,10 @@ def create_app(config=None):
         
         # Use SQLAlchemy models
         me = int(session.get('user_id') or 0)
-        chat_id = int(chat_id_raw)
+        try:
+            chat_id = int(chat_id_raw)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'not found'}), 404
         from datetime import datetime as _dt
         try:
             # Verify membership
@@ -2895,7 +3094,7 @@ def create_app(config=None):
             return jsonify({'success': True, 'id': msg_id, 'topics_found': topics, 'ai_graph': False})
         except Exception as e:
             db.session.rollback()
-            return jsonify({'error': str(e)}), 500
+            return _server_error()
 
     @app.route('/api/constellation/ideas/graph/<path:chat_id>')
     def constellation_idea_graph(chat_id):
@@ -2912,7 +3111,10 @@ def create_app(config=None):
             return jsonify(_mongo_graph('ideas', chat_id))
         
         # Use SQLAlchemy models
-        chat_id = int(chat_id)
+        try:
+            chat_id = int(chat_id)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'not found'}), 404
         me = int(session.get('user_id') or 0)
         try:
             # Verify membership
@@ -2943,7 +3145,7 @@ def create_app(config=None):
             
             return jsonify({'nodes': nodes, 'edges': edges})
         except Exception as e:
-            return jsonify({'error': str(e)}), 500
+            return _server_error()
 
     @app.route('/api/constellation/file/<file_id>')
     def constellation_file(file_id):
@@ -3081,7 +3283,10 @@ def create_app(config=None):
             return jsonify({'success': True, 'id': str(inserted.inserted_id), 'file_url': file_url})
 
         # --- SQLite / local path ---
-        chat_id = int(chat_id_raw)
+        try:
+            chat_id = int(chat_id_raw)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'not found'}), 404
         from datetime import datetime as _dt
         try:
             # Verify membership using SQLAlchemy models
@@ -3182,7 +3387,7 @@ def create_app(config=None):
             return jsonify({'success': True, 'id': msg_id, 'file_url': _media_url(rel_path)})
         except Exception as e:
             db.session.rollback()
-            return jsonify({'error': str(e)}), 500
+            return _server_error()
 
     # --- API: get graph data for constellation ---
     @app.route('/api/constellation/graph/<path:chat_id>')
@@ -3200,7 +3405,10 @@ def create_app(config=None):
             return jsonify(_mongo_graph('chat', chat_id))
         
         # Use SQLAlchemy models
-        chat_id = int(chat_id)
+        try:
+            chat_id = int(chat_id)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'not found'}), 404
         me = int(session.get('user_id') or 0)
         try:
             # Verify membership
@@ -3231,7 +3439,7 @@ def create_app(config=None):
             
             return jsonify({'nodes': nodes, 'edges': edges})
         except Exception as e:
-            return jsonify({'error': str(e)}), 500
+            return _server_error()
 
     # --- API: delete a node from the graph ---
     @app.route('/api/constellation/node/<path:chat_id>/<path:node_id>', methods=['DELETE'])
@@ -3252,8 +3460,11 @@ def create_app(config=None):
             return jsonify({'success': True})
 
         me = int(session.get('user_id') or 0)
-        chat_id = int(chat_id)
-        node_id = int(node_id)
+        try:
+            chat_id = int(chat_id)
+            node_id = int(node_id)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'not found'}), 404
         try:
             # Verify membership using SQLAlchemy
             chat = ConstellationChat.query.get(chat_id)
@@ -3278,13 +3489,24 @@ def create_app(config=None):
             return jsonify({'success': True})
         except Exception as e:
             db.session.rollback()
-            return jsonify({'error': str(e)}), 500
+            return _server_error()
 
     return app
 
 
 if __name__ == '__main__':
+    port = os.environ.get('PORT', '5000')
+    if os.environ.get('RENDER'):
+        # Older Render services start the app with `python "A&A/app.py"`. Hand off to
+        # gunicorn so production never runs on Flask's development server.
+        import shutil
+        gunicorn_bin = shutil.which('gunicorn')
+        if gunicorn_bin:
+            repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            os.chdir(repo_root)
+            os.execv(gunicorn_bin, [gunicorn_bin, 'wsgi:app', '--bind', f'0.0.0.0:{port}',
+                                    '--workers', os.environ.get('WEB_CONCURRENCY', '2'),
+                                    '--threads', '4', '--timeout', '120'])
     app = create_app()
     # Bind to the host/port expected by PaaS providers (e.g., Render)
-    # Default to 0.0.0.0 and PORT env var when available.
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)
+    app.run(host='0.0.0.0', port=int(port), debug=False)

@@ -1,3 +1,6 @@
+# Render Blueprint for Archive Arcade: a single Python web service (Flask app,
+# server-rendered pages + JSON API on the same origin, served by gunicorn).
+# Docs: https://render.com/docs/blueprint-spec
 services:
   - type: web
     name: arcade-archives
@@ -5,18 +8,24 @@ services:
     region: oregon # pick your nearest region
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120
-    healthCheckPath: /
+    startCommand: gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers ${WEB_CONCURRENCY:-2} --threads 4 --timeout 120 --access-logfile -
+    # Lightweight endpoint that does not touch the database
+    healthCheckPath: /healthz
     autoDeploy: true
     envVars:
       - key: PYTHON_VERSION
         value: "3.12.7"
+      - key: WEB_CONCURRENCY
+        value: "2"
+      # Signs sessions and CSRF tokens; must be identical for every worker/instance
       - key: SECRET_KEY
         generateValue: true
       # Render's disk is wiped on every deploy/restart (and the free plan has no
       # persistent disk), so keep app data in PostgreSQL, e.g. a free Neon database.
+      # Without it the app falls back to SQLite and loses all data on each deploy.
       - key: DATABASE_URL
         sync: false
+      # Password for the seeded "admin" account (only used when that account is first created)
       - key: ADMIN_DEFAULT_PASSWORD
         sync: false
       - key: ADMIN_USERS

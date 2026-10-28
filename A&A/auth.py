@@ -40,6 +40,16 @@ def init_db(conn=None):
 def is_authenticated():
     return bool(session.get('user_id') or session.get('user') or session.get('username'))
 
+def is_admin():
+    """Admins are the seeded 'admin' account plus any usernames listed in ADMIN_USERS."""
+    if not session.get('user_id'):
+        return False
+    uname = (session.get('user') or session.get('username') or '').lower()
+    if uname == 'admin':
+        return True
+    allowed = {u.strip().lower() for u in os.getenv('ADMIN_USERS', '').split(',') if u.strip()}
+    return uname in allowed
+
 def current_user_id():
     return session.get('user_id')
 

@@ -78,7 +78,7 @@ def init_books_db():
         conn.close()
         return True
     except Exception as e:
-        print(f"Database error: {e}")
+        current_app.logger.exception("Failed to initialize the books table")
         return False
 
 @books_bp.route('/books')
@@ -118,7 +118,8 @@ def get_books():
         
         return jsonify(books)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        current_app.logger.exception('Books API request failed')
+        return jsonify({'error': 'Something went wrong. Please try again.'}), 500
 
 @books_bp.route('/books/<int:book_id>')
 def get_book(book_id):
@@ -138,7 +139,8 @@ def get_book(book_id):
         else:
             return jsonify({'error': 'Book not found'}), 404
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        current_app.logger.exception('Books API request failed')
+        return jsonify({'error': 'Something went wrong. Please try again.'}), 500
 
 @books_bp.route('/purchase/book', methods=['POST'])
 def purchase_book():
@@ -172,7 +174,8 @@ def purchase_book():
         })
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        current_app.logger.exception('Books API request failed')
+        return jsonify({'error': 'Something went wrong. Please try again.'}), 500
 
 @books_bp.route('/rent/book', methods=['POST'])
 def rent_book():
@@ -206,4 +209,5 @@ def rent_book():
         })
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        current_app.logger.exception('Books API request failed')
+        return jsonify({'error': 'Something went wrong. Please try again.'}), 500

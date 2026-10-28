@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ title }} - Arcade</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='arcade.css') }}" />
+</head>
+<body>
+  {% include 'partials/header.html' %}
+
+  <main class="page-shell" id="main">
+    <section class="section-card" style="text-align: center; padding: 3rem 1.5rem;">
+      <p class="badge">Error {{ code }}</p>
+      <h1 class="page-title">{{ title }}</h1>
+      <p>{{ message }}</p>
+      <div class="hero-actions" style="justify-content: center; margin-top: 1.5rem;">
+        <a class="btn btn-primary" href="{{ url_for('index') }}">Back to Home</a>
+        <button class="btn btn-ghost" type="button" onclick="history.back()">Go Back</button>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

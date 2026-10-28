@@ -25,7 +25,7 @@
 <body>
   {% include 'partials/header.html' %}
 
-  <main class="page-shell">
+  <main class="page-shell" id="main">
     <header class="page-header">
       <p class="badge">Order Log</p>
       <h1 class="page-title">Purchase History</h1>
@@ -33,19 +33,25 @@
     </header>
 
     <section class="section-card">
-      <div id="history" class="list"></div>
-      <div id="empty" class="section-card" style="display:none; text-align:center;">No purchases yet.</div>
+      <div id="history" class="list" aria-busy="true"><p class="page-subtitle">Loading your orders...</p></div>
+      <div id="empty" style="display:none; text-align:center;">
+        <h3>No purchases yet</h3>
+        <p>Orders you place will show up here with their delivery status.</p>
+        <a class="btn btn-primary" href="{{ url_for('books') }}">Start shopping</a>
+      </div>
+      <div id="history-error" class="status-msg is-error" role="alert" style="display:none;"></div>
     </section>
   </main>
 
   <script>
     async function loadHistory(){
+      const list = document.getElementById('history');
+      const empty = document.getElementById('empty');
+      const errBox = document.getElementById('history-error');
       try {
-        const res = await fetch('/api/purchase/history');
-        const data = await res.json();
-        const list = document.getElementById('history');
-        const empty = document.getElementById('empty');
+        const data = await readJson(await fetch('/api/purchase/history'));
         list.innerHTML = '';
+        list.setAttribute('aria-busy', 'false');
         if (!Array.isArray(data) || data.length === 0) {
           empty.style.display = 'block';
           return;
@@ -54,16 +60,17 @@
         data.forEach(h => {
           const div = document.createElement('div');
           div.className = 'item entry';
-          const date = new Date(h.date).toLocaleString();
+          const parsed = new Date(h.date && !/Z$|[+-]\d\d:\d\d$/.test(h.date) ? h.date + 'Z' : h.date);
+          const date = isNaN(parsed) ? escapeHtml(h.date || '') : parsed.toLocaleString();
           const total = Number(h.total || 0).toFixed(2);
-          const buyer = h.buyer?.name || '';
-          const email = h.buyer?.email || '';
+          const buyer = escapeHtml(h.buyer?.name || '');
+          const email = escapeHtml(h.buyer?.email || '');
           const pay = h.paymentMethod || 'Demo';
           const ds = deliveryBadge(h.deliveryStatus || h.delivery_status);
           div.innerHTML = `
             <div class="top">
               <div>
-                <strong>Order #${h.id}</strong>
+                <strong>Order #${escapeHtml(h.id)}</strong>
                 <span class="pill">${date}</span>
                 ${paymentBadge(pay)}
                 ${ds}
@@ -72,19 +79,22 @@
             </div>
             <div class="page-subtitle">${buyer} ${email ? '- ' + email : ''}</div>
             <div class="items">${(h.items||[]).map(it => `
-              <div>${it.title} <span class="pill">${(it.item_type||'').toString().toUpperCase()}</span> <span class="pill">${it.action === 'rent' ? 'Rent' : 'Buy'}</span> x${it.quantity} - INR ${(Number(it.unit_price)*Number(it.quantity)).toFixed(2)}</div>
+              <div>${escapeHtml(it.title)} <span class="pill">${escapeHtml((it.item_type||'').toString().toUpperCase())}</span> <span class="pill">${it.action === 'rent' ? 'Rent' : 'Buy'}</span> x${escapeHtml(it.quantity)} - INR ${(Number(it.unit_price)*Number(it.quantity)).toFixed(2)}</div>
             `).join('')}</div>
           `;
           list.appendChild(div);
         });
       } catch (e) {
-        alert('Failed to load history');
+        list.innerHTML = '';
+        list.setAttribute('aria-busy', 'false');
+        errBox.textContent = (e && e.message ? e.message + ' ' : '') + 'Could not load your purchase history. Refresh to try again.';
+        errBox.style.display = 'block';
       }
     }
     function paymentBadge(method){
       const m = (method || 'Demo').toString().trim();
       const key = m.toLowerCase();
-      let label = m || 'Demo';
+      let label = escapeHtml(m || 'Demo');
       let cls = 'pm-demo';
       if (key === 'card') { cls = 'pm-card'; label = 'Card'; }
       else if (key === 'upi') { cls = 'pm-upi'; label = 'UPI'; }
