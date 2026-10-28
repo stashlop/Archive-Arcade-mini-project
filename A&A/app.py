@@ -111,6 +111,8 @@ def create_app(config=None):
         else:
             import secrets
             app.secret_key = secrets.token_hex(32)
+            app.logger.warning("SECRET_KEY is not set; using a per-process random key. "
+                               "Sessions and CSRF tokens will not survive restarts or work across serverless instances.")
     else:
         app.secret_key = secret
 
