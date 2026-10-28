@@ -185,8 +185,8 @@ Create a `.env` file in the project root (see `.env.example`):
 | `CAFE_SLOT_CAPACITY` | `10` | Maximum party seats per time slot. |
 | `CAFE_DEFAULT_DURATION` | `60` | Default booking duration in minutes. |
 | `USD_TO_INR` | `83` | Currency conversion rate applied across catalog items and cart totals. |
-| `INSTANCE_PATH` | `./instance` | Directory for persistent SQLite databases (e.g. `/mnt/instance` on Render disk). |
-| `DATABASE_URL` | *(SQLite default)* | PostgreSQL URL used for **all** app data (`POSTGRES_URL` is also accepted). Required on Vercel. |
+| `INSTANCE_PATH` | `./instance` | Directory for the SQLite database when `DATABASE_URL` is unset (e.g. a mounted persistent disk). |
+| `DATABASE_URL` | *(SQLite default)* | PostgreSQL URL used for **all** app data (`POSTGRES_URL` is also accepted). Required on Vercel and Render. |
 | `CLOUDINARY_URL` | *(optional)* | Cloudinary URL (`cloudinary://key:secret@cloud`); needed for uploads on Vercel. |
 | `CLOUDINARY_CLOUD_NAME` | *(optional)* | Cloudinary cloud identifier for cloud file uploads. |
 | `CLOUDINARY_API_KEY` | *(optional)* | Cloudinary API Key. |
@@ -198,10 +198,14 @@ Create a `.env` file in the project root (see `.env.example`):
 ## 🚀 Deployment
 
 ### Deploy on Render (Recommended)
-This repository includes a pre-configured [`render.yaml`](render.yaml) blueprint:
-1. Connect your repository on [Render](https://dashboard.render.com/).
-2. Attach a Persistent Disk mounted at `/mnt/instance` to retain database state across restarts.
-3. Configure `INSTANCE_PATH = /mnt/instance` in your Render Environment Variables.
+This repository includes a pre-configured [`render.yaml`](render.yaml) blueprint. Render's filesystem is wiped on every deploy and restart, so keep data in PostgreSQL rather than SQLite:
+
+1. Create a free PostgreSQL database (e.g. [Neon](https://neon.tech)) and copy its connection string.
+2. In the [Render dashboard](https://dashboard.render.com/) choose **New → Blueprint**, pick this repository and branch `main`.
+3. When prompted, fill in `DATABASE_URL` (the Postgres URL), `ADMIN_DEFAULT_PASSWORD` (password for the seeded `admin` user) and, for uploads, `CLOUDINARY_URL`. `SECRET_KEY` is generated for you.
+4. Deploy. Tables are created and the catalog is seeded on first start.
+
+Manual Web Service settings (if you don't use the blueprint): runtime **Python 3**, build command `pip install -r requirements.txt`, start command `gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120`, health check path `/`, plus the environment variables above and `PYTHON_VERSION=3.12.7`.
 
 ### Deploy on Vercel
 Configured via [`vercel.json`](vercel.json) using [`wsgi.py`](wsgi.py) as a serverless function handler.
