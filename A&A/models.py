@@ -76,8 +76,10 @@ class CommunitySubscriber(db.Model):
 class CommunityMessage(db.Model):
     __tablename__ = 'community_messages'
     id = db.Column(db.Integer, primary_key=True)
-    subscriber_id = db.Column(db.Integer, db.ForeignKey('community_subscribers.id'), nullable=True)
+    user_id = db.Column(db.Integer, nullable=True)
+    author = db.Column(db.Text)
     content = db.Column(db.Text, nullable=False)
+    is_admin = db.Column(db.Integer, nullable=False, default=0)
     created_at = db.Column(db.String(255), nullable=False, default=lambda: datetime.utcnow().isoformat())
 
 class FriendRequest(db.Model):

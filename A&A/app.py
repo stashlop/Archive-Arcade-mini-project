@@ -94,6 +94,8 @@ def create_app(config=None):
         else:
             import secrets
             app.secret_key = secrets.token_hex(32)
+            app.logger.warning("SECRET_KEY is not set; using a per-process random key. "
+                               "Sessions and CSRF tokens will not survive restarts or work across serverless instances.")
     else:
         app.secret_key = secret
 
@@ -576,6 +578,14 @@ def create_app(config=None):
                 cur.execute("ALTER TABLE community_subscribers ADD COLUMN display_name TEXT")
             if 'photo_path' not in cols:
                 cur.execute("ALTER TABLE community_subscribers ADD COLUMN photo_path TEXT")
+            cur.execute("PRAGMA table_info(community_messages)")
+            cols = {r[1] for r in cur.fetchall()}
+            if 'user_id' not in cols:
+                cur.execute("ALTER TABLE community_messages ADD COLUMN user_id INTEGER")
+            if 'author' not in cols:
+                cur.execute("ALTER TABLE community_messages ADD COLUMN author TEXT")
+            if 'is_admin' not in cols:
+                cur.execute("ALTER TABLE community_messages ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
             conn.commit()
         except Exception:
             pass
@@ -723,7 +733,7 @@ def create_app(config=None):
         
         try:
             # Get books from database
-            dbp = os.path.join(app.instance_path, 'books.db')
+            dbp = _unified_db_path()
             conn = sqlite3.connect(dbp)
             conn.row_factory = sqlite3.Row
 
@@ -784,7 +794,7 @@ def create_app(config=None):
         
         try:
             # Get games from database
-            dbp = os.path.join(app.instance_path, 'games.db')
+            dbp = _unified_db_path()
             conn = sqlite3.connect(dbp)
             conn.row_factory = sqlite3.Row
 
@@ -895,7 +905,7 @@ def create_app(config=None):
             return "Forbidden: Admins only", 403
         force = (request.args.get('force') or '').strip().lower() in ('1', 'true', 'yes')
         try:
-            dbp = os.path.join(app.instance_path, 'games.db')
+            dbp = _unified_db_path()
             conn = sqlite3.connect(dbp)
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
@@ -1444,10 +1454,15 @@ def create_app(config=None):
                     return jsonify({'success': False, 'error': 'Only PNG, JPG, JPEG, WEBP allowed'}), 400
                 # Save under static/uploads/community
                 upload_dir = os.path.join(app.static_folder, 'uploads', 'community')
-                os.makedirs(upload_dir, exist_ok=True)
                 new_name = f"sub_{sub_id}{ext}"
                 abs_path = os.path.join(upload_dir, new_name)
-                photo.save(abs_path)
+                try:
+                    os.makedirs(upload_dir, exist_ok=True)
+                    photo.save(abs_path)
+                except OSError:
+                    # Vercel's filesystem is read-only outside /tmp
+                    conn.close()
+                    return jsonify({'success': False, 'error': 'Photo uploads are not available on this deployment'}), 503
                 saved_rel_path = os.path.join('uploads', 'community', new_name)
 
             # Apply updates to subscriber
@@ -1596,7 +1611,7 @@ def create_app(config=None):
         if not _is_admin():
             return "Forbidden: Admins only", 403
 
-        # Purchases summary (games.db)
+        # Purchases summary
         games_dbp = _unified_db_path()
         purchases = []
         totals = { 'orders': 0, 'revenue': 0.0 }
@@ -1636,8 +1651,8 @@ def create_app(config=None):
         except Exception:
             purchases = []
 
-        # Cafe bookings (cafe.db)
-        cafe_dbp = os.path.join(app.instance_path, 'cafe.db')
+        # Cafe bookings
+        cafe_dbp = _cafe_db_path()
         bookings = []
         try:
             cconn = sqlite3.connect(cafe_dbp)
@@ -1706,7 +1721,7 @@ def create_app(config=None):
         if status_norm not in allowed:
             return jsonify({'error': 'Invalid status'}), 400
         try:
-            dbp = os.path.join(app.instance_path, 'games.db')
+            dbp = _unified_db_path()
             conn = sqlite3.connect(dbp)
             cur = conn.cursor()
             cur.execute("UPDATE purchase_history SET delivery_status=? WHERE id=?", (status_norm, pid))
